@@ -1,0 +1,97 @@
+/**
+==========================================
+ToolbarCard
+==========================================
+*/
+
+.gf-toolbarCard {
+    background: var(--ant-color-bg-container);
+    border-style: var(--ant-line-type);
+    border-width: 0 var(--ant-line-width) var(--ant-line-width);
+    border-color: var(--ant-color-border-secondary);
+}
+
+.gf-toolbarHeader {
+    font-weight: bold;
+    padding: 3px 24px;
+    background: var(--gf-dark-bg-color);
+}
+
+.gf-toolbarHeader a {
+    color: rgba(255, 255, 255, 0.88);
+}
+
+.gf-dark .gf-toolbarHeader {
+    background: #484848;
+}
+
+.gf-toolbarCardBody {
+    padding: 9px 24px;
+}
+
+.gf-toolbarCardBodyLeft .anticon {
+    padding-bottom: 2px;
+}
+
+/**
+==========================================
+Antd Skeleton
+==========================================
+*/
+
+.gf-skeleton-button {
+    display: flex;
+    align-items: center;
+    height: 100%;
+}
+
+.gf-skeleton-button .ant-skeleton .ant-skeleton-button {
+    --ant-control-height: 22px;
+    min-width: revert;
+}
+
+.gf-skeleton-button-sm .ant-skeleton .ant-skeleton-button-sm {
+    --ant-control-height-sm: 20px;
+    min-width: revert;
+}
+
+/**
+==========================================
+Rotate animation
+==========================================
+*/
+
+@keyframes rotate {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/**
+==========================================
+Collapsible Panel
+==========================================
+*/
+#root .gf-collapsible-panel .ant-collapse-header,
+#root .gf-collapsible-panel .ant-collapse-content-box {
+    padding: 0;
+}
+
+#root .gf-collapsible-panel .ant-collapse-header {
+    align-items: center;
+}
+
+/**
+==========================================
+Button with multiline text
+==========================================
+*/
+
+.gf-multiline-button {
+    white-space: normal;
+    height: auto;
+    min-height: var(--ant-control-height);
+}

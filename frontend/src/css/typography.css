@@ -1,0 +1,139 @@
+/**
+==========================================
+Size
+==========================================
+*/
+
+.gf-width-100 {
+    width: 100%;
+}
+
+.gf-height-100 {
+    height: 100%;
+}
+
+/**
+==========================================
+White Space
+==========================================
+*/
+
+.gf-breakAll {
+    word-break: break-all;
+}
+
+.gf-breakWord {
+    word-break: break-word;
+}
+
+.gf-noWrap {
+    white-space: nowrap;
+}
+
+.gf-whiteSpaceNormal {
+    white-space: normal;
+}
+
+.gf-preWrap {
+    white-space: pre-wrap;
+}
+
+/**
+==========================================
+Padding, Margin
+==========================================
+*/
+
+.gf-no-padding {
+    padding: 0;
+}
+
+/**
+==========================================
+Alignment
+==========================================
+*/
+
+.gf-ta-left {
+    text-align: left;
+}
+.gf-ta-center {
+    text-align: center;
+}
+
+.gf-ta-right {
+    text-align: right;
+}
+
+.gf-tw-balance {
+    text-wrap: balance;
+}
+
+.gf-va-middle {
+    vertical-align: middle;
+}
+
+/**
+==========================================
+Font
+==========================================
+*/
+
+.gf-strong {
+    font-weight: var(--ant-font-weight-strong);
+}
+
+.gf-font-size-smaller {
+    font-size: 90%;
+    line-height: calc(var(--ant-line-height) * 0.9);
+}
+
+.gf-font-size-small {
+    font-size: 80%;
+    line-height: calc(var(--ant-line-height) * 0.8);
+}
+
+/**
+==========================================
+Text Decoration
+==========================================
+*/
+
+.gf-underline {
+    text-decoration: underline;
+    text-underline-position: under;
+}
+
+a:hover.gf-underline-hover,
+a:active.gf-underline-hover {
+    text-decoration: underline;
+    text-underline-position: under;
+}
+
+.gf-all-caps {
+    text-transform: uppercase;
+}
+
+.gf-tabular-nums {
+    font-variant-numeric: tabular-nums;
+}
+
+/**
+==========================================
+Flex
+==========================================
+*/
+
+.gf-flex-auto {
+    flex: 1;
+}
+
+/**
+==========================================
+Title
+==========================================
+*/
+
+h4.strict-line-height {
+    line-height: var(--ant-font-size-heading-4);
+}

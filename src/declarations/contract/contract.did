@@ -1,0 +1,831 @@
+type AcceptBuyerOfferArgs = record {
+  offer_amount : nat64;
+  check_higher_offer : bool;
+  buyer : principal;
+};
+type AcceptBuyerOfferError = variant {
+  OfferMismatch;
+  HigherBuyerOfferExists;
+  OfferNotFound;
+  PermissionDenied;
+  HolderLocked : record { lock : DelayedTimestampMillis };
+  HolderWrongState;
+  CheckApprovedBalanceError : record { error : CheckApprovedBalanceError };
+  OfferRemoved;
+  CriticalCyclesLevel : record { critical_threshold_cycles : nat };
+};
+type AcceptBuyerOfferResponse = variant {
+  Ok : ProcessHolderResult;
+  Err : AcceptBuyerOfferError;
+};
+type AcceptSellerOfferArgs = record {
+  referral : opt text;
+  price : nat64;
+  approved_account : LedgerAccount;
+};
+type AcceptSellerOfferError = variant {
+  HolderLocked : record { lock : DelayedTimestampMillis };
+  HolderWrongState;
+  CheckApprovedBalanceError : record { error : CheckApprovedBalanceError };
+  CriticalCyclesLevel : record { critical_threshold_cycles : nat };
+  PriceMismatch;
+  InvalidReferral;
+};
+type AcceptSellerOfferResponse = variant {
+  Ok : ProcessHolderResult;
+  Err : AcceptSellerOfferError;
+};
+type AccountInformation = record {
+  balance : opt Timestamped_2;
+  account_identifier : blob;
+};
+type AccountsInformation = record {
+  "principal" : principal;
+  main_account_information : opt AccountInformation;
+  sub_accounts : vec SubAccountInformation;
+};
+type ActivateContractArgs = record {
+  check_permission_strategy : CheckPermissionStrategy;
+  contract_owner : principal;
+};
+type ActivateContractError = variant {
+  ValidationFailed : record { reason : text };
+  ContractActivationNotRequired;
+  ContractCallError : record { reason : text };
+  AlreadyActivated : record { owner : principal };
+  ContractLocked : record { lock : DelayedTimestampMillis };
+};
+type ActivateContractResponse = variant { Ok; Err : ActivateContractError };
+type AddContractControllerArgs = record { controller : principal };
+type AddContractControllerError = variant {
+  ContractNotActivated;
+  AddControllerDelay : record { delay : DelayedTimestampMillis };
+  CertificateNotExpired;
+  PermissionDenied;
+  ManagementCallError : record { reason : text };
+  CriticalCyclesLevel : record { critical_threshold_cycles : nat };
+  ContractLocked : record { lock : DelayedTimestampMillis };
+};
+type AddContractControllerResponse = variant {
+  Ok;
+  Err : AddContractControllerError;
+};
+type BuyerOffer = record {
+  referral : opt text;
+  offer_amount : nat64;
+  buyer : principal;
+  approved_account : LedgerAccount;
+};
+type CancelBuyerOfferError = variant {
+  HolderLocked : record { lock : DelayedTimestampMillis };
+  HolderWrongState;
+  NoBuyerOffer;
+};
+type CancelBuyerOfferResponse = variant {
+  Ok : ProcessHolderResult;
+  Err : CancelBuyerOfferError;
+};
+type CancelCaptureIdentityError = variant {
+  PermissionDenied;
+  HolderLocked : record { lock : DelayedTimestampMillis };
+  HolderWrongState;
+};
+type CancelCaptureIdentityResponse = variant {
+  Ok : ProcessHolderResult;
+  Err : CancelCaptureIdentityError;
+};
+type CancelSaleDealState = variant {
+  RefundBuyerFromTransitAccount : record { buyer : principal };
+  StartCancelSaleDeal : record { sale_deal_state : SaleDealState };
+};
+type CancelSaleIntentionError = variant {
+  PermissionDenied;
+  HolderLocked : record { lock : DelayedTimestampMillis };
+  HolderWrongState;
+};
+type CancelSaleIntentionResponse = variant {
+  Ok : ProcessHolderResult;
+  Err : CancelSaleIntentionError;
+};
+type CanisterCyclesState = record {
+  initial_cycles : nat;
+  warning_threshold_cycles : nat;
+  current_cycles : nat;
+  critical_threshold_cycles : nat;
+};
+type CanisterMetrics = record {
+  stable_memory_size : nat64;
+  cycles : nat;
+  heap_memory_size : nat64;
+};
+type CanisterStatusResult = record {
+  memory_metrics : MemoryMetrics;
+  status : CanisterStatusType;
+  memory_size : nat;
+  ready_for_migration : bool;
+  version : nat64;
+  cycles : nat;
+  settings : DefiniteCanisterSettings;
+  query_stats : QueryStats;
+  idle_cycles_burned_per_day : nat;
+  module_hash : opt blob;
+  reserved_cycles : nat;
+};
+type CanisterStatusType = variant { stopped; stopping; running };
+type CaptureError = variant {
+  SessionRegistrationAlreadyInProgress;
+  SessionRegistrationModeExpired;
+  HolderAuthnMethodRegistrationModeOff;
+  SessionRegistrationModeOff;
+  HolderAuthnMethodRegistrationUnauthorized;
+  InvalidMetadata : text;
+  HolderDeviceLost;
+};
+type CaptureProcessingEvent = variant {
+  HolderAuthnMethodRegistered;
+  AuthnMethodSessionRegistrationConfirmed : ConfirmHolderAuthnMethodRegistrationArgs;
+  IdentityAuthnMethodProtected : record {
+    public_key : blob;
+    meta_data : vec record { text; text };
+  };
+  IdentityOpenidCredentialDeleted : record {
+    openid_credential_key : record { text; text };
+  };
+  HolderContractPrincipalIsHolderOwner;
+  IdentityAuthnMethodRegistrationExited;
+  CaptureFinished;
+  ProtectedIdentityAuthnMethodDeleted;
+  GetHolderContractPrincipalUnathorized;
+  IdentityAuthnMethodsPartiallyDeleted;
+  AuthnMethodSessionRegisterError : record { error : CaptureError };
+  HolderContractPrincipalObtained : record {
+    holder_contract_principal : principal;
+  };
+  EcdsaKeyCreated : record { ecdsa_key : blob };
+  AuthnMethodSessionRegistered : record {
+    confirmation_code : text;
+    expiration : nat64;
+  };
+  HolderAuthnMethodLost;
+  AuthnMethodSessionRegistrationExpired;
+  CancelCapture;
+  IdentityAuthnMethodsObtained : record {
+    authn_pubkeys : vec blob;
+    active_registration : bool;
+    openid_credentials : opt vec record { text; text };
+  };
+  IdentityAPIChangeDetected;
+  HolderAuthnMethodRegisterError : record { error : CaptureError };
+  IdentityAuthnMethodDeleted : record { public_key : blob };
+  IdentityAuthnMethodsDeleted : record { identity_name : opt text };
+  IdentityAuthnMethodsResync;
+  CaptureStarted;
+};
+type CaptureState = variant {
+  CaptureFailed : record { error : CaptureError };
+  CreateEcdsaKey;
+  GetHolderContractPrincipal : ConfirmHolderAuthnMethodRegistrationArgs;
+  NeedConfirmAuthnMethodSessionRegistration : record {
+    confirmation_code : text;
+    expiration : nat64;
+  };
+  ObtainingIdentityAuthnMethods;
+  RegisterAuthnMethodSession;
+  FinishCapture;
+  ExitAndRegisterHolderAuthnMethod : ConfirmHolderAuthnMethodRegistrationArgs;
+  DeletingIdentityAuthnMethods : record {
+    authn_pubkeys : vec blob;
+    active_registration : bool;
+    openid_credentials : opt vec record { text; text };
+  };
+  StartCapture;
+  NeedDeleteProtectedIdentityAuthnMethod : record {
+    public_key : blob;
+    meta_data : vec record { text; text };
+  };
+};
+type ChangeSaleIntentionArgs = record { receiver_account : LedgerAccount };
+type ChangeSaleIntentionError = variant {
+  PermissionDenied;
+  HolderLocked : record { lock : DelayedTimestampMillis };
+  HolderWrongState;
+  InvalidAccountIdentifier;
+};
+type ChangeSaleIntentionResponse = variant {
+  Ok : ProcessHolderResult;
+  Err : ChangeSaleIntentionError;
+};
+type CheckApprovedBalanceError = variant {
+  InsufficientAllowance;
+  InsufficientBalance;
+  InvalidApprovedAccount : record { reason : text };
+  LedgerUnavailable : record { reason : text };
+  AllowanceExpiresTooEarly;
+};
+type CheckAssetsEvent = variant {
+  CheckAccountsAdvance : record { sub_account : blob };
+  CheckAssetsFinished;
+  AccountHasApprove : record { sub_account : blob };
+  CheckAssetsStarted;
+  CheckAccountsPrepared : record { sub_accounts : vec blob };
+};
+type CheckAssetsState = variant {
+  CheckAccountsForNoApprovePrepare;
+  FinishCheckAssets;
+  CheckAccountsForNoApproveSequential : record { sub_accounts : vec blob };
+  StartCheckAssets;
+};
+type CheckPermissionStrategy = variant {
+  CheckCallerIsDeployer;
+  CheckContractActivationCode : record { code : text };
+};
+type ChunkDef = record { count : nat64; start : nat64 };
+type CompletedSaleDeal = record {
+  assets : Timestamped_4;
+  buyer_account : LedgerAccount;
+  seller : principal;
+  seller_transfer : Timestamped_2;
+  buyer : principal;
+  seller_account : LedgerAccount;
+  price : nat64;
+};
+type ConfirmAuthnMethodRegistrationError = record {
+  retries_left : nat8;
+  verification_code : text;
+};
+type ConfirmHolderAuthnMethodRegistrationArgs = record {
+  frontend_hostname : text;
+};
+type ConfirmOwnerAuthnMethodRegistrationArgs = record {
+  verification_code : text;
+};
+type ContractCertificate = record {
+  deployer : principal;
+  contract_canister : principal;
+  hub_canister : principal;
+  contract_wasm_hash : text;
+  expiration : nat64;
+  contract_template_id : nat64;
+};
+type DefiniteCanisterSettings = record {
+  freezing_threshold : nat;
+  wasm_memory_threshold : nat;
+  environment_variables : vec EnvironmentVariable;
+  controllers : vec principal;
+  reserved_cycles_limit : nat;
+  log_visibility : LogVisibility;
+  wasm_memory_limit : nat;
+  memory_allocation : nat;
+  compute_allocation : nat;
+};
+type DelayedTimestampMillis = record { time : nat64; delay : nat64 };
+type DelegationData = record {
+  signature : opt blob;
+  public_key : blob;
+  hostname : text;
+  timestamp : nat;
+};
+type DelegationState = variant {
+  NeedPrepareDelegation : record { hostname : text };
+  GetDelegationWaiting : record {
+    delegation_data : DelegationData;
+    get_delegation_request : QueryCanisterSignedRequest;
+  };
+};
+type EnvironmentVariable = record { value : text; name : text };
+type FetchAssetsEvent = variant {
+  NeuronsInformationGot : record {
+    hk_neurons : vec NeuronAsset;
+    ctrl_neurons : vec record { NeuronAsset; vec principal };
+  };
+  NeuronsInformationObtained;
+  NeuronsInformationGotEmpty : record { neuron_ids : vec nat64 };
+  NeuronsIdsGot : record { neuron_ids : vec nat64 };
+  AccountsBalancesObtained;
+  NeuronHotkeyDeleted : record {
+    hot_key : principal;
+    failed : opt text;
+    neuron_id : nat64;
+  };
+  TooManyNeurons;
+  ObtainDelegation : record { event : ObtainDelegationEvent };
+  AllNeuronsHotkeysDeleted;
+  AccountBalanceObtained : record {
+    balance : nat64;
+    account_identifier : blob;
+  };
+  TooManyAccounts;
+  AccountsInformationGot : record {
+    accounts_information : opt AccountsInformation;
+  };
+  FetchAssetsStarted : record { fetch_assets_state : FetchAssetsState };
+  FetchAssetsFinished;
+};
+type FetchAssetsState = variant {
+  FinishFetchAssets;
+  ObtainDelegationState : record {
+    sub_state : DelegationState;
+    wrap_fetch_state : FetchAssetsState;
+  };
+  FetchNnsAssetsState : record { sub_state : FetchNnsAssetsState };
+  StartFetchAssets;
+};
+type FetchNnsAssetsState = variant {
+  GetNeuronsIds;
+  GetNeuronsInformation : record {
+    neuron_hotkeys : vec record { nat64; vec principal };
+  };
+  DeletingNeuronsHotkeys : record {
+    neuron_hotkeys : vec record { nat64; vec principal };
+  };
+  GetAccountsInformation;
+  GetAccountsBalances;
+};
+type GeHolderEventsResponse = variant { Ok : GetHolderEventsResult };
+type GetCanisterMetricsError = variant { PermissionDenied };
+type GetCanisterMetricsResponse = variant {
+  Ok : GetCanisterMetricsResult;
+  Err : GetCanisterMetricsError;
+};
+type GetCanisterMetricsResult = record { metrics : CanisterMetrics };
+type GetCanisterStatusError = variant {
+  ManagementCallError : record { reason : text };
+};
+type GetCanisterStatusResponse = variant {
+  Ok : GetCanisterStatusResult;
+  Err : GetCanisterStatusError;
+};
+type GetCanisterStatusResult = record {
+  canister_status_response : CanisterStatusResult;
+};
+type GetContractCertificateError = variant {
+  ContractCallError : record { reason : text };
+};
+type GetContractCertificateResponse = variant {
+  Ok : GetContractCertificateResult;
+  Err : GetContractCertificateError;
+};
+type GetContractCertificateResult = record {
+  certificate : SignedContractCertificate;
+};
+type GetContractOwnerError = variant {
+  ContractNotActivated;
+  ContractActivationNotRequired;
+};
+type GetContractOwnerResponse = variant {
+  Ok : GetContractOwnerResult;
+  Err : GetContractOwnerError;
+};
+type GetContractOwnerResult = record { owner : principal };
+type GetHolderEventsArgs = record {
+  sorting : opt SortingDefinition;
+  chunk_def : ChunkDef;
+};
+type GetHolderEventsResult = record {
+  events : vec IdentifiedHolderProcessingEvent;
+  total_count : nat64;
+};
+type GetHolderInformationResponse = variant { Ok : ProcessHolderResult };
+type HolderAssets = record {
+  controlled_neurons : opt Timestamped_1;
+  accounts : opt Timestamped_3;
+};
+type HolderInformation = record {
+  identity_name : opt text;
+  completed_sale_deal : opt CompletedSaleDeal;
+  update_version : nat64;
+  holding_timestamp : opt nat64;
+  owner : opt principal;
+  assets : opt Timestamped_4;
+  sale_deal : opt SaleDeal;
+  processing_error : opt Timestamped_6;
+  schedule_processing : opt DelayedTimestampMillis;
+  state : HolderState;
+  canister_cycles_state : CanisterCyclesState;
+  fetching_assets : opt HolderAssets;
+  identity_number : opt nat64;
+};
+type HolderProcessingError = variant {
+  UpdateHolderError;
+  IcAgentError : record { error : text; retry_delay : opt nat64 };
+  DelegationExpired;
+  InternalError : record { error : text };
+};
+type HolderProcessingEvent = variant {
+  DelayAddContractController : record { time : nat64 };
+  Capturing : record { event : CaptureProcessingEvent };
+  AllowAddContractController;
+  Releasing : record { event : ReleaseProcessingEvent };
+  StartCaptureIdentity : record { identity_number : nat64 };
+  ProcessingError : record { error : HolderProcessingError };
+  ContractActivated : GetContractOwnerResult;
+  Holding : record { event : HoldingProcessingEvent };
+};
+type HolderState = variant {
+  Release : record {
+    sub_state : ReleaseState;
+    release_initiation : ReleaseInitiation;
+  };
+  Closed : record { unsellable_reason : opt UnsellableReason };
+  WaitingStartCapture;
+  Capture : record { sub_state : CaptureState };
+  Holding : record { sub_state : HoldingState };
+  WaitingActivation;
+};
+type HoldingProcessingEvent = variant {
+  CheckAssets : record { event : CheckAssetsEvent };
+  QuarantineCompleted;
+  FetchAssets : record { event : FetchAssetsEvent };
+  SellableExpired;
+  AssetsValidated;
+  StartRelease;
+  HoldingStarted : record { quarantine_completion_time : nat64 };
+  HoldingStartExpired;
+  ValidateAssetsFailed : record { reason : text };
+  SaleDeal : record { event : SaleDealProcessingEvent };
+};
+type HoldingState = variant {
+  CheckAssets : record {
+    sub_state : CheckAssetsState;
+    wrap_holding_state : HoldingState;
+  };
+  CancelSaleDeal : record {
+    sub_state : CancelSaleDealState;
+    wrap_holding_state : HoldingState;
+  };
+  Hold : record { quarantine : opt nat64; sale_deal_state : opt SaleDealState };
+  FetchAssets : record {
+    fetch_assets_state : FetchAssetsState;
+    wrap_holding_state : HoldingState;
+  };
+  Unsellable : record { reason : UnsellableReason };
+  ValidateAssets : record { wrap_holding_state : HoldingState };
+  StartHolding;
+};
+type HttpHeader = record { value : text; name : text };
+type HttpRequestResult = record {
+  status : nat;
+  body : blob;
+  headers : vec HttpHeader;
+};
+type IdentifiedHolderProcessingEvent = record {
+  id : nat64;
+  time : nat64;
+  event : HolderProcessingEvent;
+};
+type IdentityEventsSortingKey = variant { Created };
+type InitContractArgs = record {
+  certificate : SignedContractCertificate;
+  contract_activation_code_hash : opt blob;
+  root_public_key_raw : blob;
+};
+type LedgerAccount = variant {
+  Account : record { owner : principal; subaccount : opt blob };
+  AccountIdentifier : record { slice : blob };
+};
+type LimitFailureReason = variant { TooManyNeurons; TooManyAccounts };
+type LogVisibility = variant {
+  controllers;
+  public;
+  allowed_viewers : vec principal;
+};
+type MemoryMetrics = record {
+  wasm_binary_size : nat;
+  wasm_chunk_store_size : nat;
+  canister_history_size : nat;
+  stable_memory_size : nat;
+  snapshots_size : nat;
+  wasm_memory_size : nat;
+  global_memory_size : nat;
+  custom_sections_size : nat;
+};
+type NeuronAsset = record { info : opt Timestamped; neuron_id : nat64 };
+type NeuronInformation = record {
+  staked_maturity_e8s_equivalent : opt nat64;
+  controller : opt principal;
+  voting_power_refreshed_timestamp_seconds : opt nat64;
+  kyc_verified : bool;
+  potential_voting_power : opt nat64;
+  neuron_type : opt int32;
+  not_for_profit : bool;
+  maturity_e8s_equivalent : nat64;
+  deciding_voting_power : opt nat64;
+  cached_neuron_stake_e8s : nat64;
+  created_timestamp_seconds : nat64;
+  auto_stake_maturity : opt bool;
+  aging_since_timestamp_seconds : nat64;
+  account : blob;
+  joined_community_fund_timestamp_seconds : opt nat64;
+  neuron_information_extended : opt NeuronInformationExtended;
+  neuron_fees_e8s : nat64;
+  visibility : opt int32;
+  known_neuron_name : opt text;
+};
+type NeuronInformationExtended = record {
+  dissolve_delay_seconds : nat64;
+  state : int32;
+  age_seconds : nat64;
+};
+type ObtainDelegationEvent = variant {
+  RetryPrepareDelegation;
+  DelegationGot : record { delegation_data : DelegationData };
+  DelegationPrepared : record {
+    delegation_data : DelegationData;
+    get_delegation_request : QueryCanisterSignedRequest;
+  };
+  DelegationLost;
+};
+type ProcessHolderResponse = variant { Ok : ProcessHolderResult };
+type ProcessHolderResult = record { holder_information : HolderInformation };
+type QueryCanisterSignedRequest = record {
+  request_sign : blob;
+  canister_id : principal;
+};
+type QueryStats = record {
+  response_payload_bytes_total : nat;
+  num_instructions_total : nat;
+  num_calls_total : nat;
+  request_payload_bytes_total : nat;
+};
+type ReceiveDelegationArgs = record { get_delegation_response : blob };
+type ReceiveDelegationError = variant {
+  ResponseNotContainsDelegation;
+  HolderLocked : record { lock : DelayedTimestampMillis };
+  HolderWrongState;
+  DelegationWrong : record { reason : text };
+};
+type ReceiveDelegationResponse = variant {
+  Ok : ProcessHolderResult;
+  Err : ReceiveDelegationError;
+};
+type ReferralRewardData = record { memo : nat64; account : LedgerAccount };
+type ReleaseError = variant {
+  HolderAuthnMethodDeleteStopOwnerAuthnMethodNotRegistered;
+  AuthnMethodRegistrationModeEnterAlreadyInProgress;
+  AuthnMethodRegistrationModeEnterInvalidRegistrationId : record {
+    error : text;
+  };
+  AuthnMethodRegistrationExpired;
+};
+type ReleaseInitiation = variant {
+  DangerousToLoseIdentity;
+  IdentityAPIChanged;
+  Manual : record { unsellable_reason : opt UnsellableReason };
+};
+type ReleaseProcessingEvent = variant {
+  HolderAuthnMethodDeleteStopOwnerAuthnMethodNotRegistered;
+  ReleaseRestarted : record { registration_id : opt text };
+  OrphanedAuthnRegistrationModeUnauthorized;
+  DeleteHolderAuthnMethod;
+  OrphanedAuthnRegistrationModeExited;
+  AuthnMethodRegistrationModeEntered : record {
+    expiration : nat64;
+    registration_id : text;
+  };
+  HolderAuthnMethodNotFound;
+  AuthnMethodRegistrationModeOff;
+  AuthnMethodRegistrationModeEnterUnathorized;
+  ConfirmAuthnMethodRegistration : ConfirmOwnerAuthnMethodRegistrationArgs;
+  ReleaseStarted;
+  AuthnMethodRegistrationNotRegistered;
+  AuthnMethodRegistrationConfirmed;
+  AuthnMethodRegistrationModeEnterFail : record { error : ReleaseError };
+  AuthnMethodRegistrationExpired;
+  AuthnMethodRegistrationWrongCode : ConfirmAuthnMethodRegistrationError;
+  HolderAuthnMethodDeleted;
+};
+type ReleaseState = variant {
+  DangerousToLoseIdentity;
+  IdentityAPIChanged;
+  DeleteHolderAuthnMethod;
+  StartRelease;
+  ConfirmAuthnMethodRegistration : record {
+    expiration : nat64;
+    verification_code : text;
+    registration_id : text;
+  };
+  ReleaseFailed : record { error : ReleaseError };
+  EnterAuthnMethodRegistrationMode : RestartReleaseIdentityArgs;
+  WaitingAuthnMethodRegistration : record {
+    expiration : nat64;
+    confirm_error : opt ConfirmAuthnMethodRegistrationError;
+    registration_id : text;
+  };
+  EnsureOrphanedRegistrationExited : RestartReleaseIdentityArgs;
+  CheckingAccessFromOwnerAuthnMethod;
+};
+type RestartReleaseIdentityArgs = record { registration_id : opt text };
+type RetryPrepareDelegationError = variant {
+  HolderLocked : record { lock : DelayedTimestampMillis };
+  HolderWrongState;
+};
+type RetryPrepareDelegationResponse = variant {
+  Ok : ProcessHolderResult;
+  Err : RetryPrepareDelegationError;
+};
+type SaleDeal = record {
+  receiver_account : LedgerAccount;
+  offers : vec Timestamped_5;
+  sale_price : opt Timestamped_2;
+  expiration_time : nat64;
+};
+type SaleDealAcceptSubState = variant {
+  TransferDeveloperReward;
+  StartAccept;
+  TransferHubReward;
+  ResolveReferralRewardData;
+  TransferSaleDealAmountToSellerAccount;
+  TransferReferralReward : record { reward_data : opt ReferralRewardData };
+  TransferSaleDealAmountToTransitAccount;
+};
+type SaleDealProcessingEvent = variant {
+  SaleDealAmountToTransitTransferred : record { block_index : opt nat64 };
+  SetSaleOffer : record { price : nat64 };
+  SaleDealAmountToSellerTransferred : record {
+    seller_amount : nat64;
+    transfer : opt TransferInformation;
+  };
+  CertificateExpired;
+  ChangeSaleIntention : ChangeSaleIntentionArgs;
+  BuyerFromTransitAccountRefunded : record {
+    buyer : principal;
+    refund : opt TransferInformation;
+  };
+  RefundBuyerFromTransitAccount : record { buyer : principal };
+  CancelBuyerOffer : record { buyer : principal };
+  DeveloperRewardTransferred : record { transfer : opt TransferInformation };
+  SaleDealAcceptStarted;
+  TransferSaleDealAmountToTransitFailed : record { reason : text };
+  ReferralRewardDataResolvingFailed : record { reason : text };
+  AcceptSellerOffer : record {
+    referral : opt text;
+    previous_referral : opt text;
+    expiration : nat64;
+    buyer : principal;
+    price : nat64;
+    approved_account : LedgerAccount;
+  };
+  SaleIntentionExpired;
+  RemoveFailedBuyerOffer : record { offer_amount : nat64; buyer : principal };
+  SetBuyerOffer : record {
+    referral : opt text;
+    previous_referral : opt text;
+    offer_amount : nat64;
+    expiration : nat64;
+    buyer : principal;
+    max_buyer_offers : nat64;
+    approved_account : LedgerAccount;
+  };
+  HubRewardTransferred : record { transfer : opt TransferInformation };
+  SaleDealCanceled;
+  CancelSaleIntention;
+  ReferralRewardTransferred : record { transfer : opt TransferInformation };
+  ReferralRewardDataResolved : record { reward_data : opt ReferralRewardData };
+  AcceptBuyerOffer : record { offer_amount : nat64; buyer : principal };
+  SetSaleIntention : record {
+    receiver_account : LedgerAccount;
+    sale_deal_expiration_time : nat64;
+  };
+};
+type SaleDealState = variant {
+  Accept : record { sub_state : SaleDealAcceptSubState; buyer : principal };
+  Trading;
+  WaitingSellOffer;
+};
+type SetBuyerOfferArgs = record {
+  referral : opt text;
+  offer_amount : nat64;
+  approved_account : LedgerAccount;
+};
+type SetBuyerOfferError = variant {
+  OfferAmountExceedsPrice;
+  HolderLocked : record { lock : DelayedTimestampMillis };
+  HolderWrongState;
+  OfferAmountTooLow : record { min_sell_price_inclusively : nat64 };
+  CheckApprovedBalanceError : record { error : CheckApprovedBalanceError };
+  InvalidReferral;
+};
+type SetBuyerOfferResponse = variant {
+  Ok : ProcessHolderResult;
+  Err : SetBuyerOfferError;
+};
+type SetSaleIntentionArgs = record { receiver_account : LedgerAccount };
+type SetSaleIntentionError = variant {
+  PermissionDenied;
+  CertificateExpirationImminent;
+  HolderLocked : record { lock : DelayedTimestampMillis };
+  HolderWrongState;
+  InvalidAccountIdentifier;
+};
+type SetSaleIntentionResponse = variant {
+  Ok : ProcessHolderResult;
+  Err : SetSaleIntentionError;
+};
+type SetSaleOfferArgs = record { price : nat64 };
+type SetSaleOfferError = variant {
+  HigherBuyerOfferExists;
+  PermissionDenied;
+  HolderLocked : record { lock : DelayedTimestampMillis };
+  HolderWrongState;
+  PriceTooLow : record { min_sell_price_inclusively : nat64 };
+};
+type SetSaleOfferResponse = variant {
+  Ok : ProcessHolderResult;
+  Err : SetSaleOfferError;
+};
+type SignedContractCertificate = record {
+  signature : blob;
+  contract_certificate : ContractCertificate;
+};
+type SortingDefinition = record {
+  key : IdentityEventsSortingKey;
+  order : SortingOrder;
+};
+type SortingOrder = variant { Descending; Ascending };
+type StartCaptureIdentityArgs = record { identity_number : nat64 };
+type StartCaptureIdentityError = variant {
+  PermissionDenied;
+  CertificateExpirationImminent;
+  HolderLocked : record { lock : DelayedTimestampMillis };
+  HolderWrongState;
+};
+type StartCaptureIdentityResponse = variant {
+  Ok : ProcessHolderResult;
+  Err : StartCaptureIdentityError;
+};
+type SubAccountInformation = record {
+  sub_account_information : AccountInformation;
+  name : text;
+  sub_account : blob;
+};
+type Timestamped = record { value : NeuronInformation; timestamp : nat64 };
+type Timestamped_1 = record { value : vec NeuronAsset; timestamp : nat64 };
+type Timestamped_2 = record { value : nat64; timestamp : nat64 };
+type Timestamped_3 = record {
+  value : opt AccountsInformation;
+  timestamp : nat64;
+};
+type Timestamped_4 = record { value : HolderAssets; timestamp : nat64 };
+type Timestamped_5 = record { value : BuyerOffer; timestamp : nat64 };
+type Timestamped_6 = record {
+  value : HolderProcessingError;
+  timestamp : nat64;
+};
+type TransferInformation = record {
+  block_index : nat64;
+  receiver_account_hex : text;
+  amount : nat64;
+};
+type TransformArgs = record { context : blob; response : HttpRequestResult };
+type UnsellableReason = variant {
+  ValidationFailed : record { reason : text };
+  CertificateExpired;
+  CheckLimitFailed : record { reason : LimitFailureReason };
+  ApproveOnAccount : record { sub_account : blob };
+  SaleDealCompleted;
+};
+service : (InitContractArgs) -> {
+  accept_buyer_offer : (AcceptBuyerOfferArgs) -> (AcceptBuyerOfferResponse);
+  accept_seller_offer : (AcceptSellerOfferArgs) -> (AcceptSellerOfferResponse);
+  activate_contract : (ActivateContractArgs) -> (ActivateContractResponse);
+  add_contract_controller : (AddContractControllerArgs) -> (
+      AddContractControllerResponse,
+    );
+  cancel_buyer_offer : (record {}) -> (CancelBuyerOfferResponse);
+  cancel_capture_identity : (record {}) -> (CancelCaptureIdentityResponse);
+  cancel_sale_intention : (record {}) -> (CancelSaleIntentionResponse);
+  change_sale_intention : (ChangeSaleIntentionArgs) -> (
+      ChangeSaleIntentionResponse,
+    );
+  confirm_holder_authn_method_registration : (
+      ConfirmHolderAuthnMethodRegistrationArgs,
+    ) -> (CancelSaleIntentionResponse);
+  confirm_owner_authn_method_registration : (
+      ConfirmOwnerAuthnMethodRegistrationArgs,
+    ) -> (CancelSaleIntentionResponse);
+  delete_holder_authn_method : (record {}) -> (CancelSaleIntentionResponse);
+  get_canister_metrics : (record {}) -> (GetCanisterMetricsResponse) query;
+  get_canister_status : () -> (GetCanisterStatusResponse);
+  get_contract_certificate : (record {}) -> (GetContractCertificateResponse);
+  get_contract_owner : (record {}) -> (GetContractOwnerResponse);
+  get_holder_events : (GetHolderEventsArgs) -> (GeHolderEventsResponse) query;
+  get_holder_information : (record {}) -> (GetHolderInformationResponse);
+  get_holder_information_query : (record {}) -> (
+      GetHolderInformationResponse,
+    ) query;
+  process_holder : (record {}) -> (ProcessHolderResponse);
+  protected_authn_method_deleted : (record {}) -> (CancelSaleIntentionResponse);
+  receive_delegation : (ReceiveDelegationArgs) -> (ReceiveDelegationResponse);
+  restart_release_identity : (RestartReleaseIdentityArgs) -> (
+      CancelSaleIntentionResponse,
+    );
+  retry_prepare_delegation : (record {}) -> (RetryPrepareDelegationResponse);
+  set_buyer_offer : (SetBuyerOfferArgs) -> (SetBuyerOfferResponse);
+  set_sale_intention : (SetSaleIntentionArgs) -> (SetSaleIntentionResponse);
+  set_sale_offer : (SetSaleOfferArgs) -> (SetSaleOfferResponse);
+  start_capture_identity : (StartCaptureIdentityArgs) -> (
+      StartCaptureIdentityResponse,
+    );
+  start_release_identity : (record {}) -> (CancelSaleIntentionResponse);
+  transform_http_response : (TransformArgs) -> (HttpRequestResult) query;
+}
