@@ -1,12 +1,13 @@
-use common_canister_impl::handlers::ic_agent::{
-    executor::{
-        call::{
-            get_certificate_from_state_response_body, get_reply_from_call_response_certificate,
+use common_canister_impl::{
+    handlers::ic_agent::{
+        executor::{
+            call::{get_certificate_from_state_response_body, lookup_request_status},
+            query::get_reply_from_query_response_body,
         },
-        query::get_reply_from_query_response_body,
+        verify::verify_state_response_certificate,
+        TransformerCtx,
     },
-    verify::verify_state_response_certificate,
-    TransformerCtx,
+    serializer::serialize,
 };
 use contract_canister_api::transform_http_response::*;
 
@@ -41,17 +42,29 @@ fn transform_http_response(args: Args) -> Response {
                     effective_canister_id,
                     env.get_ic().get_root_public_key_raw().to_vec(),
                 ) {
-                    match get_reply_from_call_response_certificate(cert, &request_id) {
-                        Ok(data) => {
-                            response.body = data;
+                    match serialize(lookup_request_status(cert, &request_id)) {
+                        Ok(content) => {
+                            response.body = content;
                         }
                         Err(error) => {
                             log_debug!(get_env(), "Failed to extract reply from call status response certificate: {:?}, error: {error:?}",
-                                get_certificate_from_state_response_body(&response.body));
+                                    get_certificate_from_state_response_body(&response.body));
                             response.body.clear();
                         }
                     }
+                } else {
+                    log_debug!(
+                        get_env(),
+                        "Failed to verify certificate from call status response"
+                    );
+                    response.body.clear();
                 }
+            } else {
+                log_debug!(
+                    get_env(),
+                    "Failed to extract certificate from state response body"
+                );
+                response.body.clear();
             }
         }
     }

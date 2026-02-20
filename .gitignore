@@ -26,3 +26,5 @@ dist/
 
 # dfinity snapshot files
 snapshot/
+/dev/
+/bin/deploy_test.sh

@@ -5,11 +5,13 @@ use candid::Principal;
 use common_canister_impl::{
     components::identity::{
         api::{
-            AuthnMethod, AuthnMethodConfirmRet, AuthnMethodConfirmationCode, AuthnMethodData,
-            AuthnMethodRegisterError, AuthnMethodRegisterRet, AuthnMethodRegistrationModeEnterRet,
-            AuthnMethodRegistrationModeExitRet, AuthnMethodRemoveRet, GetDelegationResponse,
-            IdentityAuthnInfo, IdentityAuthnInfoRet, IdentityInfoRet, OpenidCredentialRemoveRet,
-            PublicKey, RegistrationId, UserNumber, WebAuthn,
+            AccountNumber, AuthnMethod, AuthnMethodConfirmRet, AuthnMethodConfirmationCode,
+            AuthnMethodData, AuthnMethodRegisterError, AuthnMethodRegisterRet,
+            AuthnMethodRegistrationModeEnterRet, AuthnMethodRegistrationModeExitRet,
+            AuthnMethodRemoveRet, GetAccountsError, GetAccountsResponse, GetDefaultAccountRet,
+            GetDelegationResponse, IdentityAuthnInfo, IdentityAuthnInfoRet, IdentityInfoRet,
+            OpenidCredentialRemoveRet, PrepareAccountDelegationRet, PublicKey, RegistrationId,
+            UserNumber, WebAuthn,
         },
         interface::Identity,
         interface_impl::IdentityImpl,
@@ -241,6 +243,31 @@ impl Identity for IdentityTest {
         self.proxy.decode_prepare_delegation_response(response_data)
     }
 
+    fn build_prepare_account_delegation_request(
+        &self,
+        user_number: &UserNumber,
+        frontend_hostname: String,
+        account_number: Option<AccountNumber>,
+        session_key: Vec<u8>,
+        delegation_duration: Duration,
+    ) -> IcAgentRequestDefinition {
+        self.proxy.build_prepare_account_delegation_request(
+            user_number,
+            frontend_hostname,
+            account_number,
+            session_key,
+            delegation_duration,
+        )
+    }
+
+    fn decode_prepare_account_delegation_response(
+        &self,
+        response_data: &[u8],
+    ) -> Result<PrepareAccountDelegationRet, String> {
+        self.proxy
+            .decode_prepare_account_delegation_response(response_data)
+    }
+
     fn build_get_delegation_request(
         &self,
         user_number: &UserNumber,
@@ -261,6 +288,39 @@ impl Identity for IdentityTest {
         response_data: &[u8],
     ) -> Result<GetDelegationResponse, String> {
         self.proxy.decode_get_delegation_response(response_data)
+    }
+
+    fn build_get_default_account_request(
+        &self,
+        user_number: &UserNumber,
+        frontend_hostname: String,
+    ) -> IcAgentRequestDefinition {
+        self.proxy
+            .build_get_default_account_request(user_number, frontend_hostname)
+    }
+
+    fn decode_get_default_account_response(
+        &self,
+        response_data: &[u8],
+    ) -> Result<GetDefaultAccountRet, String> {
+        self.proxy
+            .decode_get_default_account_response(response_data)
+    }
+
+    fn build_get_accounts_request(
+        &self,
+        user_number: &UserNumber,
+        frontend_hostname: String,
+    ) -> IcAgentRequestDefinition {
+        self.proxy
+            .build_get_accounts_request(user_number, frontend_hostname)
+    }
+
+    fn decode_get_accounts_response(
+        &self,
+        response_data: &[u8],
+    ) -> Result<Result<GetAccountsResponse, GetAccountsError>, String> {
+        self.proxy.decode_get_accounts_response(response_data)
     }
 
     fn get_delegation_signature_msg(
