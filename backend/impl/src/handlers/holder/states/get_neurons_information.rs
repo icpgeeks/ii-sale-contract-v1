@@ -28,7 +28,7 @@ pub(crate) async fn process(
         };
 
         model
-            .fetching_assets
+            .fetching_nns_assets
             .as_ref()
             .and_then(|assets| assets.controlled_neurons.as_ref())
             .map(|neurons| {
@@ -133,7 +133,7 @@ pub(crate) async fn process(
 fn check_neurons_limit(env: &Environment, lock: &HolderLock) -> Result<(), HolderProcessingError> {
     let neurons_count = get_holder_model(|_, model| {
         model
-            .fetching_assets
+            .fetching_nns_assets
             .as_ref()
             .and_then(|assets| assets.controlled_neurons.as_ref())
             .map(|neurons| neurons.value.len())
@@ -145,7 +145,7 @@ fn check_neurons_limit(env: &Environment, lock: &HolderLock) -> Result<(), Holde
     // check only non-zero neurons
     let non_zero_neurons_count = get_holder_model(|_, model| {
         model
-            .fetching_assets
+            .fetching_nns_assets
             .as_ref()
             .and_then(|assets| assets.controlled_neurons.as_ref())
             .map(|neurons| {

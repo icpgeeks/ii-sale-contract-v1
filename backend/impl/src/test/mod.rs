@@ -240,7 +240,14 @@ macro_rules! test_state_extract_neuron_hotkeys {
             HolderState::Holding {
                 sub_state:
                     HoldingState::FetchAssets {
-                        fetch_assets_state: FetchAssetsState::FetchNnsAssetsState { sub_state },
+                        fetch_assets_state:
+                            FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                                sub_state:
+                                    FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                                        sub_state,
+                                        ..
+                                    },
+                            },
                         ..
                     },
             } => match sub_state {

@@ -42,6 +42,7 @@ pub mod finish_fetch_assets;
 pub mod get_accounts_balances;
 pub mod get_accounts_information;
 pub mod get_holder_contract_principal;
+pub mod get_identity_accounts;
 pub mod get_neurons_ids;
 pub mod get_neurons_information;
 pub mod obtain_identity_authn_methods;

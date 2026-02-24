@@ -82,7 +82,7 @@ pub(crate) fn handle_check_assets_event(
                     },
             } => {
                 let mut new_sub_accounts = sub_accounts.clone();
-                new_sub_accounts.retain(|sa| sa != sub_account);
+                new_sub_accounts.retain(|(_, sa)| sa != sub_account);
 
                 if new_sub_accounts.is_empty() {
                     set_check_sub_state(
@@ -110,7 +110,6 @@ pub(crate) fn handle_check_assets_event(
                 model,
                 CheckAssetsState::CheckAccountsForNoApproveSequential { .. }
             );
-
             let unsellable_sub_state = HoldingState::Unsellable {
                 reason: UnsellableReason::ApproveOnAccount {
                     sub_account: sub_account.clone(),

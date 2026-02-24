@@ -2,8 +2,9 @@ use std::collections::{BTreeMap, HashSet};
 
 use common_canister_types::{TimestampMillis, Timestamped};
 use contract_canister_api::types::holder::{
-    CancelSaleDealState, FetchAssetsEvent, FetchAssetsState, FetchNnsAssetsState, HolderState,
-    HoldingState, LimitFailureReason, NeuronAsset, NeuronInformation, UnsellableReason,
+    CancelSaleDealState, FetchAssetsEvent, FetchAssetsState, FetchIdentityAccountsNnsAssetsState,
+    FetchNnsAssetsState, HolderState, HoldingState, IdentityAccountNnsAssets, LimitFailureReason,
+    NeuronAsset, NeuronInformation, NnsHolderAssets, UnsellableReason,
 };
 
 use crate::model::holder::{HolderAssets, HolderModel, UpdateHolderError};
@@ -33,6 +34,133 @@ fn neuron_is_empty(info: &NeuronInformation) -> bool {
         && info.staked_maturity_e8s_equivalent.unwrap_or_default() == 0
 }
 
+/// Returns (identity_account_number, wrap_holding_state) if currently in FetchNnsAssetsState with the given sub_state pattern.
+macro_rules! nns_assets_state_matches {
+    ($model:expr, $sub_pattern:pat $(if $guard:expr)? $(,)?) => {
+        match & $model.state.value {
+            HolderState::Holding {
+                sub_state:
+                    HoldingState::FetchAssets {
+                        fetch_assets_state:
+                            FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                                sub_state:
+                                    FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                                        identity_account_number,
+                                        sub_state: $sub_pattern $(if $guard)?,
+                                    },
+                            },
+                        wrap_holding_state,
+                    },
+            } => (identity_account_number.clone(), wrap_holding_state.clone()),
+            _ => {
+                return Err(UpdateHolderError::WrongState);
+            }
+        }
+    };
+}
+
+fn set_fetch_assets_state(
+    model: &mut HolderModel,
+    time: TimestampMillis,
+    wrap_holding_state: Box<HoldingState>,
+    new_fetch_state: FetchAssetsState,
+) {
+    model.state = Timestamped::new(
+        time,
+        HolderState::Holding {
+            sub_state: HoldingState::FetchAssets {
+                fetch_assets_state: new_fetch_state,
+                wrap_holding_state,
+            },
+        },
+    );
+}
+
+fn set_identity_accounts_sub_state(
+    model: &mut HolderModel,
+    time: TimestampMillis,
+    wrap_holding_state: Box<HoldingState>,
+    new_sub_state: FetchIdentityAccountsNnsAssetsState,
+) {
+    set_fetch_assets_state(
+        model,
+        time,
+        wrap_holding_state,
+        FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+            sub_state: new_sub_state,
+        },
+    );
+}
+
+fn set_nns_assets_sub_state(
+    model: &mut HolderModel,
+    time: TimestampMillis,
+    wrap_holding_state: Box<HoldingState>,
+    identity_account_number: Option<u64>,
+    new_nns_sub_state: FetchNnsAssetsState,
+) {
+    set_identity_accounts_sub_state(
+        model,
+        time,
+        wrap_holding_state,
+        FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+            identity_account_number,
+            sub_state: new_nns_sub_state,
+        },
+    );
+}
+
+/// Find the next account_number from fetching_assets.nns_assets that has not been fetched yet
+/// (i.e., assets == None), skipping the one that was just finished.
+fn find_next_unfetched_account(model: &HolderModel) -> Option<Option<u64>> {
+    model
+        .fetching_assets
+        .as_ref()?
+        .nns_assets
+        .as_ref()?
+        .iter()
+        .find(|slot| slot.assets.is_none())
+        .map(|slot| slot.identity_account_number)
+}
+
+/// Save fetching_nns_assets to the slot corresponding to identity_account_number.
+/// Sets principal from delegation_data and clears fetching_nns_assets + delegation_data.
+fn save_current_nns_assets_to_slot(
+    model: &mut HolderModel,
+    time: TimestampMillis,
+    identity_account_number: Option<u64>,
+) {
+    let principal = model.get_delegation_controller();
+    let mut nns_assets = model.fetching_nns_assets.take();
+    model.delegation_data = None;
+
+    // Ensure timestamps are set on nns_assets fields
+    if let Some(a) = nns_assets.as_mut() {
+        if let Some(neurons) = a.controlled_neurons.as_mut() {
+            if neurons.timestamp == 0 {
+                neurons.timestamp = time;
+            }
+        }
+        if let Some(accounts) = a.accounts.as_mut() {
+            if accounts.timestamp == 0 {
+                accounts.timestamp = time;
+            }
+        }
+    }
+
+    if let Some(fetching) = model.fetching_assets.as_mut() {
+        if let Some(slots) = fetching.nns_assets.as_mut() {
+            if let Some(slot) = slots
+                .iter_mut()
+                .find(|s| s.identity_account_number == identity_account_number)
+            {
+                slot.principal = principal;
+                slot.assets = nns_assets;
+            }
+        }
+    }
+}
+
 pub(crate) fn handle_fetch_assets_event(
     model: &mut HolderModel,
     time: TimestampMillis,
@@ -43,33 +171,84 @@ pub(crate) fn handle_fetch_assets_event(
             let wrap_holding_state =
                 assets_state_matches!(model, FetchAssetsState::StartFetchAssets);
 
-            model.fetching_assets = Some(HolderAssets {
+            model.fetching_assets = Some(HolderAssets { nns_assets: None });
+            model.fetching_nns_assets = None;
+
+            set_fetch_assets_state(model, time, wrap_holding_state, fetch_assets_state.clone());
+
+            Ok(())
+        }
+
+        FetchAssetsEvent::ObtainDelegation { event } => handle_delegation_event(model, time, event),
+
+        FetchAssetsEvent::IdentityAccountsGot {
+            hostname,
+            account_numbers,
+        } => {
+            let wrap_holding_state = assets_state_matches!(
+                model,
+                FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                    sub_state: FetchIdentityAccountsNnsAssetsState::GetIdentityAccounts,
+                }
+            );
+
+            // Initialize slots for each identity account
+            let slots: Vec<IdentityAccountNnsAssets> = account_numbers
+                .iter()
+                .map(|&account_number| IdentityAccountNnsAssets {
+                    identity_account_number: account_number,
+                    principal: None,
+                    assets: None,
+                })
+                .collect();
+
+            model.fetching_assets.as_mut().unwrap().nns_assets = Some(slots);
+            model.fetching_nns_assets = None;
+
+            // Transition to first account or finish if no accounts
+            if let Some(first_account_number) = account_numbers.first().copied() {
+                set_identity_accounts_sub_state(
+                    model,
+                    time,
+                    wrap_holding_state,
+                    FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                        identity_account_number: first_account_number,
+                        sub_state: FetchNnsAssetsState::ObtainDelegationState {
+                            sub_state: contract_canister_api::types::holder::DelegationState::NeedPrepareDelegation {
+                                hostname: hostname.clone(),
+                                identity_account_number: first_account_number,
+                            },
+                            wrap_fetch_state: Box::new(FetchNnsAssetsState::GetNeuronsIds),
+                        },
+                    },
+                );
+            } else {
+                // No accounts — skip to global finish
+                set_fetch_assets_state(
+                    model,
+                    time,
+                    wrap_holding_state,
+                    FetchAssetsState::FinishFetchAssets,
+                );
+            }
+
+            Ok(())
+        }
+
+        FetchAssetsEvent::NeuronsIdsGot { neuron_ids } => {
+            let (identity_account_number, wrap_holding_state) =
+                nns_assets_state_matches!(model, FetchNnsAssetsState::GetNeuronsIds);
+
+            model.fetching_nns_assets.get_or_insert(NnsHolderAssets {
                 controlled_neurons: None,
                 accounts: None,
             });
 
-            model.state = Timestamped::new(
-                time,
-                HolderState::Holding {
-                    sub_state: HoldingState::FetchAssets {
-                        fetch_assets_state: fetch_assets_state.clone(),
-                        wrap_holding_state,
-                    },
-                },
-            );
-
-            Ok(())
-        }
-        FetchAssetsEvent::ObtainDelegation { event } => handle_delegation_event(model, time, event),
-        FetchAssetsEvent::NeuronsIdsGot { neuron_ids } => {
-            let wrap_holding_state = assets_state_matches!(
-                model,
-                FetchAssetsState::FetchNnsAssetsState {
-                    sub_state: FetchNnsAssetsState::GetNeuronsIds,
-                }
-            );
-
-            model.fetching_assets.as_mut().unwrap().controlled_neurons = Some(Timestamped::new(
+            model
+                .fetching_nns_assets
+                .as_mut()
+                .unwrap()
+                .controlled_neurons = Some(Timestamped::new(
                 time,
                 neuron_ids
                     .iter()
@@ -80,30 +259,25 @@ pub(crate) fn handle_fetch_assets_event(
                     .collect(),
             ));
 
-            let new_fetch_state = if neuron_ids.is_empty() {
-                FetchAssetsState::FetchNnsAssetsState {
-                    sub_state: FetchNnsAssetsState::GetAccountsInformation,
-                }
+            let new_nns_state = if neuron_ids.is_empty() {
+                FetchNnsAssetsState::GetAccountsInformation
             } else {
-                FetchAssetsState::FetchNnsAssetsState {
-                    sub_state: FetchNnsAssetsState::GetNeuronsInformation {
-                        neuron_hotkeys: vec![],
-                    },
+                FetchNnsAssetsState::GetNeuronsInformation {
+                    neuron_hotkeys: vec![],
                 }
             };
 
-            model.state = Timestamped::new(
+            set_nns_assets_sub_state(
+                model,
                 time,
-                HolderState::Holding {
-                    sub_state: HoldingState::FetchAssets {
-                        fetch_assets_state: new_fetch_state,
-                        wrap_holding_state,
-                    },
-                },
+                wrap_holding_state,
+                identity_account_number,
+                new_nns_state,
             );
 
             Ok(())
         }
+
         FetchAssetsEvent::NeuronsInformationGot {
             ctrl_neurons,
             hk_neurons,
@@ -113,9 +287,15 @@ pub(crate) fn handle_fetch_assets_event(
                     sub_state:
                         HoldingState::FetchAssets {
                             fetch_assets_state:
-                                FetchAssetsState::FetchNnsAssetsState {
+                                FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
                                     sub_state:
-                                        FetchNnsAssetsState::GetNeuronsInformation { neuron_hotkeys },
+                                        FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                                            sub_state:
+                                                FetchNnsAssetsState::GetNeuronsInformation {
+                                                    neuron_hotkeys,
+                                                },
+                                            ..
+                                        },
                                 },
                             ..
                         },
@@ -125,7 +305,7 @@ pub(crate) fn handle_fetch_assets_event(
                 }
             };
 
-            let fetching_assets = model.fetching_assets.as_mut().unwrap();
+            let fetching_nns_assets = model.fetching_nns_assets.as_mut().unwrap();
 
             let mut new_neurons_info_map = BTreeMap::new();
             let mut empty_neuron_set = HashSet::new();
@@ -142,7 +322,7 @@ pub(crate) fn handle_fetch_assets_event(
                 }
             });
 
-            fetching_assets
+            fetching_nns_assets
                 .controlled_neurons
                 .as_mut()
                 .unwrap()
@@ -152,9 +332,7 @@ pub(crate) fn handle_fetch_assets_event(
                         && !empty_neuron_set.contains(&info.neuron_id)
                 });
 
-            // update controlled neurons info
-
-            fetching_assets
+            fetching_nns_assets
                 .controlled_neurons
                 .as_mut()
                 .unwrap()
@@ -171,55 +349,80 @@ pub(crate) fn handle_fetch_assets_event(
 
             Ok(())
         }
-        FetchAssetsEvent::NeuronsInformationGotEmpty { neuron_ids } => {
-            assets_state_matches!(
-                model,
-                FetchAssetsState::FetchNnsAssetsState {
-                    sub_state: FetchNnsAssetsState::GetNeuronsInformation { .. },
-                }
-            );
 
-            let fetching_assets = model.fetching_assets.as_mut().unwrap();
-            let controlled_neurons =
-                &mut fetching_assets.controlled_neurons.as_mut().unwrap().value;
+        FetchAssetsEvent::NeuronsInformationGotEmpty { neuron_ids } => {
+            nns_assets_state_matches!(model, FetchNnsAssetsState::GetNeuronsInformation { .. });
+
+            let fetching_nns_assets = model.fetching_nns_assets.as_mut().unwrap();
+            let controlled_neurons = &mut fetching_nns_assets
+                .controlled_neurons
+                .as_mut()
+                .unwrap()
+                .value;
             controlled_neurons.retain(|neuron| !neuron_ids.contains(&neuron.neuron_id));
 
             Ok(())
         }
+
         FetchAssetsEvent::NeuronsInformationObtained => {
-            let (wrap_holding_state, neuron_hotkeys) = match &mut model.state.value {
+            let (identity_account_number, wrap_holding_state) = match &mut model.state.value {
                 HolderState::Holding {
                     sub_state:
                         HoldingState::FetchAssets {
                             fetch_assets_state:
-                                FetchAssetsState::FetchNnsAssetsState {
+                                FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
                                     sub_state:
-                                        FetchNnsAssetsState::GetNeuronsInformation { neuron_hotkeys },
+                                        FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                                            identity_account_number,
+                                            sub_state:
+                                                FetchNnsAssetsState::GetNeuronsInformation { .. },
+                                        },
                                 },
                             wrap_holding_state,
                         },
-                } => (wrap_holding_state, neuron_hotkeys),
+                } => (
+                    *identity_account_number,
+                    wrap_holding_state.clone(),
+                    // also capture neuron_hotkeys for DeletingNeuronsHotkeys
+                    // need to restructure — read neuron_hotkeys here
+                ),
                 _ => {
                     return Err(UpdateHolderError::WrongState);
                 }
             };
 
-            model.state = Timestamped::new(
-                time,
+            let neuron_hotkeys = match &model.state.value {
                 HolderState::Holding {
-                    sub_state: HoldingState::FetchAssets {
-                        fetch_assets_state: FetchAssetsState::FetchNnsAssetsState {
-                            sub_state: FetchNnsAssetsState::DeletingNeuronsHotkeys {
-                                neuron_hotkeys: neuron_hotkeys.clone(),
-                            },
+                    sub_state:
+                        HoldingState::FetchAssets {
+                            fetch_assets_state:
+                                FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                                    sub_state:
+                                        FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                                            sub_state:
+                                                FetchNnsAssetsState::GetNeuronsInformation {
+                                                    neuron_hotkeys,
+                                                },
+                                            ..
+                                        },
+                                },
+                            ..
                         },
-                        wrap_holding_state: wrap_holding_state.clone(),
-                    },
-                },
+                } => neuron_hotkeys.clone(),
+                _ => return Err(UpdateHolderError::WrongState),
+            };
+
+            set_nns_assets_sub_state(
+                model,
+                time,
+                wrap_holding_state,
+                identity_account_number,
+                FetchNnsAssetsState::DeletingNeuronsHotkeys { neuron_hotkeys },
             );
 
             Ok(())
         }
+
         FetchAssetsEvent::NeuronHotkeyDeleted {
             neuron_id, hot_key, ..
         } => {
@@ -228,9 +431,15 @@ pub(crate) fn handle_fetch_assets_event(
                     sub_state:
                         HoldingState::FetchAssets {
                             fetch_assets_state:
-                                FetchAssetsState::FetchNnsAssetsState {
+                                FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
                                     sub_state:
-                                        FetchNnsAssetsState::DeletingNeuronsHotkeys { neuron_hotkeys },
+                                        FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                                            sub_state:
+                                                FetchNnsAssetsState::DeletingNeuronsHotkeys {
+                                                    neuron_hotkeys,
+                                                },
+                                            ..
+                                        },
                                 },
                             ..
                         },
@@ -240,75 +449,60 @@ pub(crate) fn handle_fetch_assets_event(
                 }
             };
 
-            neuron_hotkeys.retain_mut(|neuron_hotkeys_entry| {
-                if &neuron_hotkeys_entry.0 == neuron_id {
-                    neuron_hotkeys_entry.1.retain(|hk| hk != hot_key);
+            neuron_hotkeys.retain_mut(|entry| {
+                if &entry.0 == neuron_id {
+                    entry.1.retain(|hk| hk != hot_key);
                 }
-                !neuron_hotkeys_entry.1.is_empty()
+                !entry.1.is_empty()
             });
             Ok(())
         }
+
         FetchAssetsEvent::AllNeuronsHotkeysDeleted => {
-            let wrap_holding_state = assets_state_matches!(
+            let (identity_account_number, wrap_holding_state) = nns_assets_state_matches!(
                 model,
-                FetchAssetsState::FetchNnsAssetsState {
-                    sub_state: FetchNnsAssetsState::DeletingNeuronsHotkeys { .. },
-                }
+                FetchNnsAssetsState::DeletingNeuronsHotkeys { .. }
             );
 
-            model.state = Timestamped::new(
+            set_nns_assets_sub_state(
+                model,
                 time,
-                HolderState::Holding {
-                    sub_state: HoldingState::FetchAssets {
-                        fetch_assets_state: FetchAssetsState::FetchNnsAssetsState {
-                            sub_state: FetchNnsAssetsState::GetAccountsInformation,
-                        },
-                        wrap_holding_state,
-                    },
-                },
+                wrap_holding_state,
+                identity_account_number,
+                FetchNnsAssetsState::GetAccountsInformation,
             );
 
             Ok(())
         }
+
         FetchAssetsEvent::AccountsInformationGot {
             accounts_information,
         } => {
-            let wrap_holding_state = assets_state_matches!(
-                model,
-                FetchAssetsState::FetchNnsAssetsState {
-                    sub_state: FetchNnsAssetsState::GetAccountsInformation,
-                }
-            );
+            let (identity_account_number, wrap_holding_state) =
+                nns_assets_state_matches!(model, FetchNnsAssetsState::GetAccountsInformation);
 
-            model.fetching_assets.as_mut().unwrap().accounts =
+            model.fetching_nns_assets.as_mut().unwrap().accounts =
                 Some(Timestamped::new(time, accounts_information.clone()));
 
-            model.state = Timestamped::new(
+            set_nns_assets_sub_state(
+                model,
                 time,
-                HolderState::Holding {
-                    sub_state: HoldingState::FetchAssets {
-                        fetch_assets_state: FetchAssetsState::FetchNnsAssetsState {
-                            sub_state: FetchNnsAssetsState::GetAccountsBalances,
-                        },
-                        wrap_holding_state: wrap_holding_state.clone(),
-                    },
-                },
+                wrap_holding_state,
+                identity_account_number,
+                FetchNnsAssetsState::GetAccountsBalances,
             );
+
             Ok(())
         }
+
         FetchAssetsEvent::AccountBalanceObtained {
             account_identifier,
             balance,
         } => {
-            assets_state_matches!(
-                model,
-                FetchAssetsState::FetchNnsAssetsState {
-                    sub_state: FetchNnsAssetsState::GetAccountsBalances,
-                }
-            );
+            nns_assets_state_matches!(model, FetchNnsAssetsState::GetAccountsBalances);
 
             if let Some(accounts) = model
-                .fetching_assets
+                .fetching_nns_assets
                 .as_mut()
                 .unwrap()
                 .accounts
@@ -335,25 +529,79 @@ pub(crate) fn handle_fetch_assets_event(
 
             Ok(())
         }
+
         FetchAssetsEvent::AccountsBalancesObtained => {
+            let (identity_account_number, wrap_holding_state) =
+                nns_assets_state_matches!(model, FetchNnsAssetsState::GetAccountsBalances);
+
+            // Move to per-account finish state
+            set_identity_accounts_sub_state(
+                model,
+                time,
+                wrap_holding_state,
+                FetchIdentityAccountsNnsAssetsState::FinishCurrentNnsAccountFetch {
+                    identity_account_number,
+                },
+            );
+
+            Ok(())
+        }
+
+        FetchAssetsEvent::NnsAssetsForAccountFetched {
+            identity_account_number,
+        } => {
             let wrap_holding_state = assets_state_matches!(
                 model,
-                FetchAssetsState::FetchNnsAssetsState {
-                    sub_state: FetchNnsAssetsState::GetAccountsBalances,
+                FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                    sub_state: FetchIdentityAccountsNnsAssetsState::FinishCurrentNnsAccountFetch { .. },
                 }
             );
 
-            model.state = Timestamped::new(
-                time,
-                HolderState::Holding {
-                    sub_state: HoldingState::FetchAssets {
-                        fetch_assets_state: FetchAssetsState::FinishFetchAssets,
-                        wrap_holding_state: wrap_holding_state.clone(),
-                    },
-                },
-            );
+            // Read hostname from delegation_data before clearing it
+            let hostname = model
+                .delegation_data
+                .as_ref()
+                .map(|d| d.hostname.clone())
+                .unwrap_or_default();
+
+            // Save current account's nns assets to the appropriate slot (also clears delegation_data)
+            save_current_nns_assets_to_slot(model, time, *identity_account_number);
+
+            // Find next unfetched account
+            match find_next_unfetched_account(model) {
+                Some(next_account_number) => {
+                    // Transition to ObtainDelegationState for the next account
+                    set_identity_accounts_sub_state(
+                        model,
+                        time,
+                        wrap_holding_state,
+                        FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                            identity_account_number: next_account_number,
+                            sub_state: FetchNnsAssetsState::ObtainDelegationState {
+                                sub_state:
+                                    contract_canister_api::types::holder::DelegationState::NeedPrepareDelegation {
+                                        hostname,
+                                        identity_account_number: next_account_number,
+                                    },
+                                wrap_fetch_state: Box::new(FetchNnsAssetsState::GetNeuronsIds),
+                            },
+                        },
+                    );
+                }
+                None => {
+                    // All accounts fetched — transition to global FinishFetchAssets
+                    set_fetch_assets_state(
+                        model,
+                        time,
+                        wrap_holding_state,
+                        FetchAssetsState::FinishFetchAssets,
+                    );
+                }
+            }
+
             Ok(())
         }
+
         FetchAssetsEvent::FetchAssetsFinished => {
             let wrap_holding_state =
                 assets_state_matches!(model, FetchAssetsState::FinishFetchAssets);
@@ -371,11 +619,15 @@ pub(crate) fn handle_fetch_assets_event(
             );
             Ok(())
         }
+
         FetchAssetsEvent::TooManyAccounts => {
             let wrap_holding_state = assets_state_matches!(
                 model,
-                FetchAssetsState::FetchNnsAssetsState {
-                    sub_state: FetchNnsAssetsState::GetAccountsInformation
+                FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                    sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                        sub_state: FetchNnsAssetsState::GetAccountsInformation,
+                        ..
+                    },
                 }
             );
 
@@ -388,11 +640,15 @@ pub(crate) fn handle_fetch_assets_event(
 
             Ok(())
         }
+
         FetchAssetsEvent::TooManyNeurons => {
             let wrap_holding_state = assets_state_matches!(
                 model,
-                FetchAssetsState::FetchNnsAssetsState {
-                    sub_state: FetchNnsAssetsState::GetNeuronsInformation { .. }
+                FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                    sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                        sub_state: FetchNnsAssetsState::GetNeuronsInformation { .. },
+                        ..
+                    },
                 }
             );
 

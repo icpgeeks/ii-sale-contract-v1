@@ -7,6 +7,7 @@ use common_canister_types::{
 use serde::{Deserialize, Serialize};
 
 pub type IdentityNumber = u64;
+pub type IdentityAccountNumber = u64;
 pub type PublicKey = Vec<u8>;
 
 #[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
@@ -110,21 +111,30 @@ impl HoldingState {
 
 #[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 pub enum FetchAssetsState {
-    ObtainDelegationState {
-        sub_state: DelegationState,
-        wrap_fetch_state: Box<FetchAssetsState>,
-    },
     StartFetchAssets,
-    FetchNnsAssetsState {
-        sub_state: FetchNnsAssetsState,
+    FetchIdentityAccountsNnsAssetsState {
+        sub_state: FetchIdentityAccountsNnsAssetsState,
     },
     FinishFetchAssets,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+pub enum FetchIdentityAccountsNnsAssetsState {
+    GetIdentityAccounts,
+    FetchNnsAssetsState {
+        identity_account_number: Option<IdentityAccountNumber>,
+        sub_state: FetchNnsAssetsState,
+    },
+    FinishCurrentNnsAccountFetch {
+        identity_account_number: Option<IdentityAccountNumber>,
+    },
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 pub enum DelegationState {
     NeedPrepareDelegation {
         hostname: String,
+        identity_account_number: Option<IdentityAccountNumber>,
     },
     GetDelegationWaiting {
         get_delegation_request: QueryCanisterSignedRequest,
@@ -142,6 +152,10 @@ pub struct DelegationData {
 
 #[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 pub enum FetchNnsAssetsState {
+    ObtainDelegationState {
+        sub_state: DelegationState,
+        wrap_fetch_state: Box<FetchNnsAssetsState>,
+    },
     GetNeuronsIds,
     GetNeuronsInformation {
         neuron_hotkeys: Vec<(NeuronId, Vec<Principal>)>,
@@ -157,7 +171,9 @@ pub enum FetchNnsAssetsState {
 pub enum CheckAssetsState {
     StartCheckAssets,
     CheckAccountsForNoApprovePrepare,
-    CheckAccountsForNoApproveSequential { sub_accounts: Vec<Vec<u8>> },
+    CheckAccountsForNoApproveSequential {
+        sub_accounts: Vec<(Principal, Vec<u8>)>,
+    },
     FinishCheckAssets,
 }
 
@@ -367,6 +383,10 @@ pub enum FetchAssetsEvent {
     ObtainDelegation {
         event: ObtainDelegationEvent,
     },
+    IdentityAccountsGot {
+        hostname: String,
+        account_numbers: Vec<Option<IdentityAccountNumber>>,
+    },
     NeuronsIdsGot {
         neuron_ids: Vec<NeuronId>,
     },
@@ -394,6 +414,9 @@ pub enum FetchAssetsEvent {
         account_identifier: Vec<u8>,
         balance: TokenE8s,
     },
+    NnsAssetsForAccountFetched {
+        identity_account_number: Option<IdentityAccountNumber>,
+    },
     FetchAssetsFinished,
 }
 
@@ -419,9 +442,15 @@ pub struct CheckSubaccount {
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub enum CheckAssetsEvent {
     CheckAssetsStarted,
-    CheckAccountsPrepared { sub_accounts: Vec<Vec<u8>> },
-    CheckAccountsAdvance { sub_account: Vec<u8> },
-    AccountHasApprove { sub_account: Vec<u8> },
+    CheckAccountsPrepared {
+        sub_accounts: Vec<(Principal, Vec<u8>)>,
+    },
+    CheckAccountsAdvance {
+        sub_account: Vec<u8>,
+    },
+    AccountHasApprove {
+        sub_account: Vec<u8>,
+    },
     CheckAssetsFinished,
 }
 
@@ -689,9 +718,21 @@ pub struct BuyerOffer {
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
-pub struct HolderAssets {
+pub struct NnsHolderAssets {
     pub controlled_neurons: Option<Timestamped<Vec<NeuronAsset>>>,
     pub accounts: Option<Timestamped<Option<AccountsInformation>>>,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct IdentityAccountNnsAssets {
+    pub identity_account_number: Option<IdentityAccountNumber>,
+    pub principal: Option<Principal>,
+    pub assets: Option<NnsHolderAssets>,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct HolderAssets {
+    pub nns_assets: Option<Vec<IdentityAccountNnsAssets>>,
 }
 
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]

@@ -1,4 +1,3 @@
-use candid::Principal;
 use common_canister_impl::components::ledger::vec_to_slice32;
 use contract_canister_api::types::holder::{
     CheckAssetsEvent, CheckAssetsState, HolderProcessingError, HolderProcessingEvent, HolderState,
@@ -25,17 +24,10 @@ pub(crate) async fn process(
                         CheckAssetsState::CheckAccountsForNoApproveSequential { sub_accounts },
                     ..
                 },
-        } => Ok((
-            Principal::self_authenticating(
-                model
-                    .delegation_data
-                    .as_ref()
-                    .unwrap()
-                    .public_key
-                    .as_slice(),
-            ),
-            sub_accounts.first().unwrap().clone(),
-        )),
+        } => {
+            let (principal, account) = sub_accounts.first().unwrap();
+            Ok((*principal, account.clone()))
+        }
         _ => Err(HolderProcessingError::InternalError {
             error: "Invalid state".to_string(),
         }),
@@ -61,7 +53,9 @@ pub(crate) async fn process(
                 hex::encode(&sub_account)
             );
 
-            Ok(CheckAssetsEvent::CheckAccountsAdvance { sub_account })
+            Ok(CheckAssetsEvent::CheckAccountsAdvance {
+                sub_account: sub_account.clone(),
+            })
         }
         Ok(_) => {
             log_info!(
@@ -70,7 +64,9 @@ pub(crate) async fn process(
                 hex::encode(&sub_account)
             );
 
-            Ok(CheckAssetsEvent::AccountHasApprove { sub_account })
+            Ok(CheckAssetsEvent::AccountHasApprove {
+                sub_account: sub_account.clone(),
+            })
         }
         Err(error) => Err(to_internal_error(error)),
     }?;

@@ -14,7 +14,8 @@ use common_canister_types::TimestampNanos;
 use contract_canister_api::{
     receive_delegation::*,
     types::holder::{
-        DelegationData, DelegationState, FetchAssetsEvent, FetchAssetsState, HolderProcessingEvent,
+        DelegationData, DelegationState, FetchAssetsEvent, FetchAssetsState,
+        FetchIdentityAccountsNnsAssetsState, FetchNnsAssetsState, HolderProcessingEvent,
         HolderState, HoldingProcessingEvent, HoldingState, ObtainDelegationEvent,
     },
 };
@@ -83,12 +84,20 @@ fn verify_delegation(
             sub_state:
                 HoldingState::FetchAssets {
                     fetch_assets_state:
-                        FetchAssetsState::ObtainDelegationState {
+                        FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
                             sub_state:
-                                DelegationState::GetDelegationWaiting {
-                                    delegation_data, ..
+                                FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                                    sub_state:
+                                        FetchNnsAssetsState::ObtainDelegationState {
+                                            sub_state:
+                                                DelegationState::GetDelegationWaiting {
+                                                    delegation_data,
+                                                    ..
+                                                },
+                                            ..
+                                        },
+                                    ..
                                 },
-                            ..
                         },
                     ..
                 },
@@ -142,13 +151,20 @@ async fn tmp(env: &Environment, data: &[u8]) -> Result<Vec<u8>, ReceiveDelegatio
             sub_state:
                 HoldingState::FetchAssets {
                     fetch_assets_state:
-                        FetchAssetsState::ObtainDelegationState {
+                        FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
                             sub_state:
-                                DelegationState::GetDelegationWaiting {
-                                    get_delegation_request,
+                                FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                                    sub_state:
+                                        FetchNnsAssetsState::ObtainDelegationState {
+                                            sub_state:
+                                                DelegationState::GetDelegationWaiting {
+                                                    get_delegation_request,
+                                                    ..
+                                                },
+                                            ..
+                                        },
                                     ..
                                 },
-                            ..
                         },
                     ..
                 },

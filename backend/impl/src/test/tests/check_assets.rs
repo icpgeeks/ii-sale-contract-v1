@@ -2,7 +2,10 @@ use std::{i32, u64};
 
 use candid::{Encode, Principal};
 use common_canister_impl::components::{
-    identity::api::{Delegation, GetDelegationResponse, SignedDelegation},
+    identity::api::{
+        Delegation, GetAccountsError, GetAccountsResponse, GetDelegationResponse,
+        PrepareAccountDelegation, PrepareAccountDelegationRet, SignedDelegation,
+    },
     nns::api::{
         BallotInfo, DissolveState, Followees, ListNeuronsResponse, Neuron, NeuronId, NeuronInfo,
         NeuronStakeTransfer, ProposalId,
@@ -14,8 +17,8 @@ use contract_canister_api::{
     receive_delegation::ReceiveDelegationError,
     types::holder::{
         CheckAssetsState, DelegationData, DelegationState, FetchAssetsEvent, FetchAssetsState,
-        FetchNnsAssetsState, HolderProcessingEvent, HolderState, HoldingProcessingEvent,
-        HoldingState, ObtainDelegationEvent, UnsellableReason,
+        FetchIdentityAccountsNnsAssetsState, FetchNnsAssetsState, HolderProcessingEvent,
+        HolderState, HoldingProcessingEvent, HoldingState, ObtainDelegationEvent, UnsellableReason,
     },
 };
 use ic_ledger_types::{AccountIdentifier, Subaccount};
@@ -66,8 +69,19 @@ async fn test_check_assets_have_approve() {
         }
     });
 
-    let identity_principal =
-        get_holder_model(|_, model| model.get_delegation_controller().unwrap());
+    let identity_principal = get_holder_model(|_, model| {
+        model
+            .fetching_assets
+            .as_ref()
+            .and_then(|fa| fa.nns_assets.as_ref())
+            .and_then(|accounts| {
+                accounts
+                    .iter()
+                    .find(|a| a.identity_account_number.is_none())
+            })
+            .and_then(|account| account.principal)
+            .unwrap()
+    });
 
     let subaccount = [0u8; 32];
     for i in 2..4 {
@@ -141,8 +155,19 @@ async fn test_check_assets_have_approve_after_quarantine() {
 
     ht_fetch_assets().await;
 
-    let identity_principal =
-        get_holder_model(|_, model| model.get_delegation_controller().unwrap());
+    let identity_principal = get_holder_model(|_, model| {
+        model
+            .fetching_assets
+            .as_ref()
+            .and_then(|fa| fa.nns_assets.as_ref())
+            .and_then(|accounts| {
+                accounts
+                    .iter()
+                    .find(|a| a.identity_account_number.is_none())
+            })
+            .and_then(|account| account.principal)
+            .unwrap()
+    });
     let subaccount = [0u8; 32];
     ht_approve_account(
         Account {
@@ -229,21 +254,51 @@ pub(crate) async fn ht_fetch_assets() {
     crate::handlers::holder::processor::process_holder_with_lock().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::FetchAssets {
-            fetch_assets_state: FetchAssetsState::ObtainDelegationState {
-                sub_state: DelegationState::NeedPrepareDelegation { .. },
-                ..
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::GetIdentityAccounts,
             },
             ..
         }
     });
 
-    set_test_ic_agent_response(Encode!(&vec![1u8], &234213412341234u64).unwrap());
+    set_test_ic_agent_response({
+        let m: Result<GetAccountsResponse, GetAccountsError> = Err(GetAccountsError::NoAccounts);
+        Encode!(&m).unwrap()
+    });
     crate::handlers::holder::processor::process_holder_with_lock().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::FetchAssets {
-            fetch_assets_state: FetchAssetsState::ObtainDelegationState {
-                sub_state: DelegationState::GetDelegationWaiting { .. },
-                ..
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                    sub_state: FetchNnsAssetsState::ObtainDelegationState {
+                        sub_state: DelegationState::NeedPrepareDelegation { .. },
+                        ..
+                    },
+                    ..
+                },
+            },
+            ..
+        }
+    });
+
+    set_test_ic_agent_response({
+        let m: PrepareAccountDelegationRet = Ok(PrepareAccountDelegation {
+            user_key: vec![1u8].into(),
+            expiration: 234213412341234u64,
+        });
+        Encode!(&m).unwrap()
+    });
+    crate::handlers::holder::processor::process_holder_with_lock().await;
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::FetchAssets {
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                    sub_state: FetchNnsAssetsState::ObtainDelegationState {
+                        sub_state: DelegationState::GetDelegationWaiting { .. },
+                        ..
+                    },
+                    ..
+                },
             },
             ..
         }
@@ -290,9 +345,11 @@ pub(crate) async fn ht_fetch_assets() {
 
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::FetchAssets {
-            fetch_assets_state: FetchAssetsState::FetchNnsAssetsState {
-                sub_state: FetchNnsAssetsState::GetNeuronsIds,
-                ..
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                    sub_state: FetchNnsAssetsState::GetNeuronsIds,
+                    ..
+                },
             },
             ..
         }
@@ -302,9 +359,11 @@ pub(crate) async fn ht_fetch_assets() {
     crate::handlers::holder::processor::process_holder_with_lock().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::FetchAssets {
-            fetch_assets_state: FetchAssetsState::FetchNnsAssetsState {
-                sub_state: FetchNnsAssetsState::GetNeuronsInformation { .. },
-                ..
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                    sub_state: FetchNnsAssetsState::GetNeuronsInformation { .. },
+                    ..
+                },
             },
             ..
         }
@@ -325,9 +384,11 @@ pub(crate) async fn ht_fetch_assets() {
     crate::handlers::holder::processor::process_holder_with_lock().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::FetchAssets {
-            fetch_assets_state: FetchAssetsState::FetchNnsAssetsState {
-                sub_state: FetchNnsAssetsState::GetNeuronsInformation { .. },
-                ..
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                    sub_state: FetchNnsAssetsState::GetNeuronsInformation { .. },
+                    ..
+                },
             },
             ..
         }
@@ -336,9 +397,11 @@ pub(crate) async fn ht_fetch_assets() {
     crate::handlers::holder::processor::process_holder_with_lock().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::FetchAssets {
-            fetch_assets_state: FetchAssetsState::FetchNnsAssetsState {
-                sub_state: FetchNnsAssetsState::DeletingNeuronsHotkeys { .. },
-                ..
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                    sub_state: FetchNnsAssetsState::DeletingNeuronsHotkeys { .. },
+                    ..
+                },
             },
             ..
         }
@@ -374,9 +437,11 @@ pub(crate) async fn ht_fetch_assets() {
     crate::handlers::holder::processor::process_holder_with_lock().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::FetchAssets {
-            fetch_assets_state: FetchAssetsState::FetchNnsAssetsState {
-                sub_state: FetchNnsAssetsState::GetAccountsInformation,
-                ..
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                    sub_state: FetchNnsAssetsState::GetAccountsInformation,
+                    ..
+                },
             },
             ..
         }
@@ -387,14 +452,26 @@ pub(crate) async fn ht_fetch_assets() {
         crate::handlers::holder::processor::process_holder_with_lock().await;
         test_state_matches!(HolderState::Holding {
             sub_state: HoldingState::FetchAssets {
-                fetch_assets_state: FetchAssetsState::FetchNnsAssetsState {
-                    sub_state: FetchNnsAssetsState::GetAccountsBalances,
-                    ..
+                fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                    sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                        sub_state: FetchNnsAssetsState::GetAccountsBalances,
+                        ..
+                    },
                 },
                 ..
             }
         });
     }
+
+    crate::handlers::holder::processor::process_holder_with_lock().await;
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::FetchAssets {
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::FinishCurrentNnsAccountFetch { .. },
+            },
+            ..
+        }
+    });
 
     crate::handlers::holder::processor::process_holder_with_lock().await;
     test_state_matches!(HolderState::Holding {
