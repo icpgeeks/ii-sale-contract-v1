@@ -37,6 +37,7 @@ use crate::{
             mock_authn_method_remove_ok,
         },
         HT_CAPTURED_IDENTITY_NUMBER, HT_QUARANTINE_DURATION, HT_SALE_DEAL_SAFE_CLOSE_DURATION,
+        HT_STANDARD_CERT_EXPIRATION, TEST_RELEASE_EXPIRATION_NANOS, TEST_RELEASE_REGISTRATION_ID,
     },
     test_state_matches,
     updates::holder::{
@@ -52,7 +53,7 @@ use crate::{
 async fn test_releasing_happy_path() {
     let test_identity_number = 778;
     drive_to_hold(
-        2 * HT_SALE_DEAL_SAFE_CLOSE_DURATION,
+        HT_STANDARD_CERT_EXPIRATION,
         ht_get_test_deployer(),
         test_identity_number,
         &FetchConfig::single_no_neurons(),
@@ -92,7 +93,7 @@ async fn happy_path_release(
         ..
     });
 
-    let expiration_provided = 60_000_000_000;
+    let expiration_provided = TEST_RELEASE_EXPIRATION_NANOS;
     let expiration_provided_millis = nanos_to_millis(&(expiration_provided as u128));
     mock_authn_method_registration_mode_enter_ok(expiration_provided);
     super::tick().await;
@@ -107,7 +108,7 @@ async fn happy_path_release(
             ..
         } => {
             assert_eq!(*expiration, expiration_provided_millis);
-            assert_eq!(registration_id, "00000");
+            assert_eq!(registration_id, TEST_RELEASE_REGISTRATION_ID);
         }
         _ => panic!(
             "Expected WaitingAuthnMethodRegistration state, {:?}",
@@ -174,7 +175,7 @@ async fn happy_path_release(
 async fn test_releasing() {
     let test_identity_number = 777;
     drive_to_hold(
-        2 * HT_SALE_DEAL_SAFE_CLOSE_DURATION,
+        HT_STANDARD_CERT_EXPIRATION,
         ht_get_test_deployer(),
         test_identity_number,
         &FetchConfig::single_no_neurons(),
@@ -209,7 +210,7 @@ async fn test_releasing() {
         ..
     });
 
-    let expiration_provided = 60_000_000_000;
+    let expiration_provided = TEST_RELEASE_EXPIRATION_NANOS;
     let expiration_provided_millis = nanos_to_millis(&(expiration_provided as u128));
     mock_authn_method_registration_mode_enter_ok(expiration_provided);
     super::tick().await;
@@ -224,7 +225,7 @@ async fn test_releasing() {
             ..
         } => {
             assert_eq!(*expiration, expiration_provided_millis);
-            assert_eq!(registration_id, "00000");
+            assert_eq!(registration_id, TEST_RELEASE_REGISTRATION_ID);
         }
         _ => panic!(
             "Expected WaitingAuthnMethodRegistration state, {:?}",
@@ -275,7 +276,7 @@ async fn test_releasing() {
                 ..
             } => {
                 assert_eq!(*expiration, expiration_provided_millis);
-                assert_eq!(registration_id, "00000");
+                assert_eq!(registration_id, TEST_RELEASE_REGISTRATION_ID);
             }
             _ => panic!(
                 "Expected WaitingAuthnMethodRegistration state, {:?}",
@@ -457,7 +458,7 @@ async fn test_releasing() {
 async fn test_releasing_after_quarantine() {
     let test_identity_number = 779;
     drive_to_hold(
-        2 * HT_SALE_DEAL_SAFE_CLOSE_DURATION,
+        HT_STANDARD_CERT_EXPIRATION,
         ht_get_test_deployer(),
         test_identity_number,
         &FetchConfig::single_no_neurons(),
@@ -481,7 +482,7 @@ async fn test_releasing_after_quarantine() {
 async fn test_releasing_in_unsellable_mode() {
     let test_identity_number = 779;
     drive_to_hold(
-        2 * HT_SALE_DEAL_SAFE_CLOSE_DURATION,
+        HT_STANDARD_CERT_EXPIRATION,
         ht_get_test_deployer(),
         test_identity_number,
         &FetchConfig::single_no_neurons(),
@@ -518,7 +519,7 @@ async fn test_releasing_in_unsellable_mode() {
 async fn test_releasing_in_sale_without_sale_offer() {
     let test_identity_number = 779;
     drive_to_hold(
-        2 * HT_SALE_DEAL_SAFE_CLOSE_DURATION,
+        HT_STANDARD_CERT_EXPIRATION,
         ht_get_test_deployer(),
         test_identity_number,
         &FetchConfig::single_no_neurons(),
@@ -546,7 +547,7 @@ async fn test_releasing_in_sale_without_sale_offer() {
 async fn test_releasing_with_failed_confirmation() {
     let test_identity_number = 780;
     drive_to_hold(
-        2 * HT_SALE_DEAL_SAFE_CLOSE_DURATION,
+        HT_STANDARD_CERT_EXPIRATION,
         ht_get_test_deployer(),
         test_identity_number,
         &FetchConfig::single_no_neurons(),
@@ -576,7 +577,7 @@ async fn test_releasing_with_failed_confirmation() {
         ..
     });
 
-    let expiration_provided = 60_000_000_000;
+    let expiration_provided = TEST_RELEASE_EXPIRATION_NANOS;
     mock_authn_method_registration_mode_enter_ok(expiration_provided);
     super::tick().await;
 
@@ -639,7 +640,7 @@ async fn test_releasing_with_failed_confirmation() {
 async fn test_release_when_fetch_assets() {
     let owner = ht_get_test_deployer();
     drive_to_hold(
-        2 * 24 * 60 * 60 * 1000,
+        HT_STANDARD_CERT_EXPIRATION,
         owner,
         HT_CAPTURED_IDENTITY_NUMBER,
         &FetchConfig::single_no_neurons(),
@@ -670,7 +671,7 @@ async fn test_release_when_fetch_assets() {
 async fn test_release_when_check_assets() {
     let owner = ht_get_test_deployer();
     drive_to_hold(
-        2 * 24 * 60 * 60 * 1000,
+        HT_STANDARD_CERT_EXPIRATION,
         owner,
         HT_CAPTURED_IDENTITY_NUMBER,
         &FetchConfig::single_no_neurons(),
@@ -711,7 +712,7 @@ async fn test_release_when_check_assets() {
 async fn test_release_when_validate_assets() {
     let owner = ht_get_test_deployer();
     drive_to_hold(
-        2 * 24 * 60 * 60 * 1000,
+        HT_STANDARD_CERT_EXPIRATION,
         owner,
         HT_CAPTURED_IDENTITY_NUMBER,
         &FetchConfig::single_no_neurons(),

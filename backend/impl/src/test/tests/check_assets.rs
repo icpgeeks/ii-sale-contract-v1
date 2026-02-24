@@ -17,7 +17,8 @@ use crate::{
         components::{allowance_ledger::ht_approve_account, time::set_test_time},
         drivers::{
             capture::drive_to_captured,
-            fetch::{drive_to_finish_fetch_assets, drive_to_hold, FetchConfig},
+            fetch::{drive_to_finish_fetch_assets, FetchConfig},
+            hold::drive_to_standard_hold,
         },
         ht_get_test_deployer, HT_CAPTURED_IDENTITY_NUMBER, HT_QUARANTINE_DURATION,
     },
@@ -76,13 +77,7 @@ async fn tick_until_unsellable() {
 /// Full happy-path: capture → fetch → check → Hold.
 #[tokio::test]
 async fn test_check_assets_happy_path() {
-    drive_to_hold(
-        2 * 24 * 60 * 60 * 1000,
-        ht_get_test_deployer(),
-        HT_CAPTURED_IDENTITY_NUMBER,
-        &FetchConfig::single_no_neurons(),
-    )
-    .await;
+    drive_to_standard_hold(ht_get_test_deployer()).await;
 
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::Hold {
@@ -196,13 +191,7 @@ async fn test_check_assets_have_approve() {
 #[tokio::test]
 async fn test_check_assets_have_approve_after_quarantine() {
     // First cycle: reach Hold normally
-    drive_to_hold(
-        2 * 24 * 60 * 60 * 1000,
-        ht_get_test_deployer(),
-        HT_CAPTURED_IDENTITY_NUMBER,
-        &FetchConfig::single_no_neurons(),
-    )
-    .await;
+    drive_to_standard_hold(ht_get_test_deployer()).await;
 
     // Advance time past quarantine → re-fetch begins
     set_test_time(HT_QUARANTINE_DURATION + 1);

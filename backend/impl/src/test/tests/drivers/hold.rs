@@ -1,8 +1,30 @@
+use candid::Principal;
+
 use crate::test::tests::{
     components::time::set_test_time,
-    drivers::fetch::{drive_to_check_assets_finished, FetchConfig},
-    HT_QUARANTINE_DURATION,
+    drivers::fetch::{drive_to_check_assets_finished, drive_to_hold, FetchConfig},
+    HT_CAPTURED_IDENTITY_NUMBER, HT_QUARANTINE_DURATION, HT_STANDARD_CERT_EXPIRATION,
 };
+
+/// Drives the state machine all the way to
+/// `HolderState::Holding { sub_state: HoldingState::Hold { .. } }`
+/// using the standard test configuration:
+///
+/// - certificate expiration: `HT_STANDARD_CERT_EXPIRATION`
+/// - identity number: `HT_CAPTURED_IDENTITY_NUMBER`
+/// - fetch config: `FetchConfig::single_no_neurons()`
+///
+/// **Precondition:** canister state is freshly initialised (no prior `init_state` call).
+/// No `test_state_matches!` assertions inside — pure navigation.
+pub(crate) async fn drive_to_standard_hold(owner: Principal) {
+    drive_to_hold(
+        HT_STANDARD_CERT_EXPIRATION,
+        owner,
+        HT_CAPTURED_IDENTITY_NUMBER,
+        &FetchConfig::single_no_neurons(),
+    )
+    .await;
+}
 
 /// Drives the state machine past the quarantine period and through a full
 /// re-fetch + re-check cycle, landing back in `Hold { quarantine: None }`.

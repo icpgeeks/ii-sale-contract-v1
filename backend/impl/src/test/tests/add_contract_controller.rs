@@ -28,15 +28,15 @@ use crate::{
             time::set_test_time,
         },
         drivers::{
-            fetch::{drive_to_hold, FetchConfig},
-            hold::drive_after_quarantine,
+            fetch::FetchConfig,
+            hold::{drive_after_quarantine, drive_to_standard_hold},
         },
         ht_get_test_buyer, ht_get_test_deployer, ht_init_test_contract,
         sale::{
             ht_get_buyer_approved_account, ht_set_buyer_offer, ht_set_sale_intentions,
             ht_set_sale_offer,
         },
-        HT_CAPTURED_IDENTITY_NUMBER, HT_MIN_PRICE, HT_SALE_DEAL_SAFE_CLOSE_DURATION,
+        HT_MIN_PRICE, HT_STANDARD_CERT_EXPIRATION,
     },
     test_state_matches,
     updates::{
@@ -117,15 +117,8 @@ async fn test_add_contract_controller_with_sale_intention() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
     let new_controller = Principal::from_text("xon54-haaaa-aaaak-quewq-cai").unwrap();
-    let certificate_expiration = HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2;
-
-    drive_to_hold(
-        certificate_expiration,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-        &FetchConfig::single_no_neurons(),
-    )
-    .await;
+    let certificate_expiration = HT_STANDARD_CERT_EXPIRATION;
+    drive_to_standard_hold(owner).await;
 
     ht_set_sale_intentions(owner).await;
 
@@ -254,15 +247,8 @@ async fn test_add_contract_controller_with_accepted_sale_deal() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
     let new_controller = Principal::from_text("xon54-haaaa-aaaak-quewq-cai").unwrap();
-    let certificate_expiration = HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2;
-
-    drive_to_hold(
-        certificate_expiration,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-        &FetchConfig::single_no_neurons(),
-    )
-    .await;
+    let certificate_expiration = HT_STANDARD_CERT_EXPIRATION;
+    drive_to_standard_hold(owner).await;
 
     ht_set_sale_intentions(owner).await;
 

@@ -176,10 +176,27 @@ mod tests {
     pub(crate) const HT_QUARANTINE_DURATION: u64 = 10 * 60_000;
     pub(crate) const HT_MIN_PRICE: u64 = 100_000_000;
 
+    /// Standard certificate expiration used in the majority of tests.
+    ///
+    /// Equals `2 × HT_SALE_DEAL_SAFE_CLOSE_DURATION`, which ensures the certificate does not
+    /// expire during the sale window, giving tests enough headroom without caring about the
+    /// exact value.
+    pub(crate) const HT_STANDARD_CERT_EXPIRATION: u64 = 2 * HT_SALE_DEAL_SAFE_CLOSE_DURATION;
+
     // --- Reward permyriad constants ---
     pub(crate) const HT_DEVELOPER_REWARDS_PERMYRIAD: u32 = 1_000;
     pub(crate) const HT_REFERRAL_REWARDS_PERMYRIAD: u32 = 1_000;
     pub(crate) const HT_HUB_REWARDS_PERMYRIAD: u32 = 1_000;
+
+    // --- Release / authn method registration (owner side) constants ---
+
+    /// Expiration (nanoseconds) returned by the mock
+    /// `authn_method_registration_mode_enter` response during release-flow tests.
+    pub(crate) const TEST_RELEASE_EXPIRATION_NANOS: u64 = 60_000_000_000;
+
+    /// Registration ID produced by the test RNG when `generate_random_string(5, zeros, dict)`
+    /// is called — always `"00000"` because `dict[0] == '0'` and the test RNG returns zeros.
+    pub(crate) const TEST_RELEASE_REGISTRATION_ID: &str = "00000";
 
     // --- Delegation / fetch constants ---
 
