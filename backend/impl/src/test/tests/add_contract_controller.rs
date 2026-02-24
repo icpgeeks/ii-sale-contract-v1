@@ -27,11 +27,14 @@ use crate::{
             ledger::{ht_get_account_balance, HT_LEDGER_FEE},
             time::set_test_time,
         },
-        fetch_assets::ht_capture_identity_and_fetch_assets,
+        drivers::{
+            fetch::{drive_to_hold, FetchConfig},
+            hold::drive_after_quarantine,
+        },
         ht_get_test_buyer, ht_get_test_deployer, ht_init_test_contract,
         sale::{
-            ht_end_quarantine, ht_get_buyer_approved_account, ht_set_buyer_offer,
-            ht_set_sale_intentions, ht_set_sale_offer,
+            ht_get_buyer_approved_account, ht_set_buyer_offer, ht_set_sale_intentions,
+            ht_set_sale_offer,
         },
         HT_CAPTURED_IDENTITY_NUMBER, HT_MIN_PRICE, HT_SALE_DEAL_SAFE_CLOSE_DURATION,
     },
@@ -116,10 +119,11 @@ async fn test_add_contract_controller_with_sale_intention() {
     let new_controller = Principal::from_text("xon54-haaaa-aaaak-quewq-cai").unwrap();
     let certificate_expiration = HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2;
 
-    ht_capture_identity_and_fetch_assets(
+    drive_to_hold(
         certificate_expiration,
         owner,
         HT_CAPTURED_IDENTITY_NUMBER,
+        &FetchConfig::single_no_neurons(),
     )
     .await;
 
@@ -132,7 +136,7 @@ async fn test_add_contract_controller_with_sale_intention() {
         sale_offer
     );
 
-    ht_end_quarantine().await;
+    drive_after_quarantine(&FetchConfig::single_no_neurons()).await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::Hold {
             quarantine: None,
@@ -217,7 +221,7 @@ async fn test_add_contract_controller_with_sale_intention() {
         }
     });
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::Unsellable {
             reason: UnsellableReason::CertificateExpired
@@ -252,10 +256,11 @@ async fn test_add_contract_controller_with_accepted_sale_deal() {
     let new_controller = Principal::from_text("xon54-haaaa-aaaak-quewq-cai").unwrap();
     let certificate_expiration = HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2;
 
-    ht_capture_identity_and_fetch_assets(
+    drive_to_hold(
         certificate_expiration,
         owner,
         HT_CAPTURED_IDENTITY_NUMBER,
+        &FetchConfig::single_no_neurons(),
     )
     .await;
 
@@ -268,7 +273,7 @@ async fn test_add_contract_controller_with_accepted_sale_deal() {
         sale_offer
     );
 
-    ht_end_quarantine().await;
+    drive_after_quarantine(&FetchConfig::single_no_neurons()).await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::Hold {
             quarantine: None,
@@ -299,7 +304,7 @@ async fn test_add_contract_controller_with_accepted_sale_deal() {
             }
         } if accept_buyer == &buyer);
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
             sub_state: HoldingState::Hold {
                 quarantine: None,
@@ -310,7 +315,7 @@ async fn test_add_contract_controller_with_accepted_sale_deal() {
             }
         } if accept_buyer == &buyer);
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
             sub_state: HoldingState::Hold {
                 quarantine: None,
@@ -374,7 +379,7 @@ async fn test_add_contract_controller_with_accepted_sale_deal() {
             }
         } if accept_buyer == &buyer);
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
                 sub_state: HoldingState::CancelSaleDeal {
                     sub_state: CancelSaleDealState::StartCancelSaleDeal {
@@ -386,7 +391,7 @@ async fn test_add_contract_controller_with_accepted_sale_deal() {
         matches!(sale_deal_state.as_ref(), SaleDealState::Accept { sub_state: SaleDealAcceptSubState::TransferReferralReward { .. }, .. })
         && matches!(wrap_holding_state.as_ref(), HoldingState::Unsellable { reason: UnsellableReason::CertificateExpired }));
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
                 sub_state: HoldingState::CancelSaleDeal {
                     sub_state: CancelSaleDealState::RefundBuyerFromTransitAccount { .. },
@@ -395,7 +400,7 @@ async fn test_add_contract_controller_with_accepted_sale_deal() {
         } if
         matches!(wrap_holding_state.as_ref(), HoldingState::Unsellable { reason: UnsellableReason::CertificateExpired }));
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::Unsellable {
             reason: UnsellableReason::CertificateExpired

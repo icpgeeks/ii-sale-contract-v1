@@ -1,7 +1,5 @@
-use candid::Encode;
 use common_canister_impl::components::identity::api::{
-    AuthnMethodConfirmRet, AuthnMethodConfirmationError, AuthnMethodRegistrationModeEnterRet,
-    AuthnMethodRegistrationModeExitError, AuthnMethodRegistrationModeExitRet, AuthnMethodRemoveRet,
+    AuthnMethodConfirmationError, AuthnMethodRegistrationModeExitError,
 };
 use common_canister_types::{nanos_to_millis, LedgerAccount, Timestamped};
 use contract_canister_api::{
@@ -18,17 +16,26 @@ use contract_canister_api::{
 };
 
 use crate::{
-    handlers::holder::states::enter_authn_method_registration_mode::generate_random_string,
+    handlers::holder::states::{
+        enter_authn_method_registration_mode::generate_random_string, get_holder_model,
+    },
     processing_err_matches, result_err_matches, result_ok_with_holder_information,
     test::tests::{
-        check_assets::{ht_capture_identity_and_fetch_assets_common, ht_fetch_assets},
         components::{
-            ic::set_test_caller, ic_agent::set_test_ic_agent_response,
-            identity::set_test_additional_auth, time::set_test_time,
+            ic::set_test_caller, identity::set_test_additional_auth, time::set_test_time,
         },
-        fetch_assets::ht_capture_identity_and_fetch_assets,
+        drivers::{
+            fetch::{drive_to_finish_fetch_assets, drive_to_hold, FetchConfig},
+            hold::drive_after_quarantine,
+        },
         ht_get_test_deployer, ht_get_test_hub_canister,
-        sale::ht_end_quarantine,
+        support::mocks::{
+            mock_authn_method_confirm_err, mock_authn_method_confirm_ok,
+            mock_authn_method_registration_mode_enter_ok,
+            mock_authn_method_registration_mode_exit_ret_err,
+            mock_authn_method_registration_mode_exit_ret_ok, mock_authn_method_remove_err,
+            mock_authn_method_remove_ok,
+        },
         HT_CAPTURED_IDENTITY_NUMBER, HT_QUARANTINE_DURATION, HT_SALE_DEAL_SAFE_CLOSE_DURATION,
     },
     test_state_matches,
@@ -44,10 +51,11 @@ use crate::{
 #[tokio::test]
 async fn test_releasing_happy_path() {
     let test_identity_number = 778;
-    ht_capture_identity_and_fetch_assets(
+    drive_to_hold(
         2 * HT_SALE_DEAL_SAFE_CLOSE_DURATION,
         ht_get_test_deployer(),
         test_identity_number,
+        &FetchConfig::single_no_neurons(),
     )
     .await;
 
@@ -76,7 +84,7 @@ async fn happy_path_release(
         }
     );
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Release {
         sub_state: ReleaseState::EnterAuthnMethodRegistrationMode {
             registration_id: None
@@ -86,14 +94,9 @@ async fn happy_path_release(
 
     let expiration_provided = 60_000_000_000;
     let expiration_provided_millis = nanos_to_millis(&(expiration_provided as u128));
-    set_test_ic_agent_response(
-        Encode!(&AuthnMethodRegistrationModeEnterRet::Ok {
-            expiration: expiration_provided
-        })
-        .unwrap(),
-    );
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    crate::handlers::holder::states::get_holder_model(|_, model| match &model.state.value {
+    mock_authn_method_registration_mode_enter_ok(expiration_provided);
+    super::tick().await;
+    get_holder_model(|_, model| match &model.state.value {
         HolderState::Release {
             sub_state:
                 ReleaseState::WaitingAuthnMethodRegistration {
@@ -138,8 +141,8 @@ async fn happy_path_release(
         ),
     });
 
-    set_test_ic_agent_response(Encode!(&AuthnMethodConfirmRet::Ok).unwrap());
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    mock_authn_method_confirm_ok();
+    super::tick().await;
     test_state_matches!(HolderState::Release {
         sub_state: ReleaseState::CheckingAccessFromOwnerAuthnMethod,
         ..
@@ -157,11 +160,11 @@ async fn happy_path_release(
     });
 
     // add ecsda key
-    crate::handlers::holder::states::get_holder_model(|_, model| {
+    get_holder_model(|_, model| {
         set_test_additional_auth(model.get_ecdsa_as_uncompressed_public_key());
     });
-    set_test_ic_agent_response(Encode!(&AuthnMethodRemoveRet::Ok).unwrap());
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    mock_authn_method_remove_ok();
+    super::tick().await;
     test_state_matches!(HolderState::Closed {
         unsellable_reason
     } if unsellable_reason == &unsellable_reason_opt);
@@ -170,10 +173,11 @@ async fn happy_path_release(
 #[tokio::test]
 async fn test_releasing() {
     let test_identity_number = 777;
-    ht_capture_identity_and_fetch_assets(
+    drive_to_hold(
         2 * HT_SALE_DEAL_SAFE_CLOSE_DURATION,
         ht_get_test_deployer(),
         test_identity_number,
+        &FetchConfig::single_no_neurons(),
     )
     .await;
 
@@ -197,7 +201,7 @@ async fn test_releasing() {
         }
     );
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Release {
         sub_state: ReleaseState::EnterAuthnMethodRegistrationMode {
             registration_id: None
@@ -207,14 +211,9 @@ async fn test_releasing() {
 
     let expiration_provided = 60_000_000_000;
     let expiration_provided_millis = nanos_to_millis(&(expiration_provided as u128));
-    set_test_ic_agent_response(
-        Encode!(&AuthnMethodRegistrationModeEnterRet::Ok {
-            expiration: expiration_provided
-        })
-        .unwrap(),
-    );
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    crate::handlers::holder::states::get_holder_model(|_, model| match &model.state.value {
+    mock_authn_method_registration_mode_enter_ok(expiration_provided);
+    super::tick().await;
+    get_holder_model(|_, model| match &model.state.value {
         HolderState::Release {
             sub_state:
                 ReleaseState::WaitingAuthnMethodRegistration {
@@ -234,7 +233,7 @@ async fn test_releasing() {
     });
     // emulate expiration
     set_test_time(expiration_provided_millis + 1);
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Release {
         sub_state: ReleaseState::ReleaseFailed {
             error: ReleaseError::AuthnMethodRegistrationExpired
@@ -263,14 +262,9 @@ async fn test_releasing() {
             },
             ..
         });
-        set_test_ic_agent_response(
-            Encode!(&AuthnMethodRegistrationModeEnterRet::Ok {
-                expiration: expiration_provided
-            })
-            .unwrap(),
-        );
-        crate::handlers::holder::processor::process_holder_with_lock().await;
-        crate::handlers::holder::states::get_holder_model(|_, model| match &model.state.value {
+        mock_authn_method_registration_mode_enter_ok(expiration_provided);
+        super::tick().await;
+        get_holder_model(|_, model| match &model.state.value {
             HolderState::Release {
                 sub_state:
                     ReleaseState::WaitingAuthnMethodRegistration {
@@ -309,7 +303,7 @@ async fn test_releasing() {
             holder_information.identity_number,
             Some(test_identity_number)
         );
-        crate::handlers::holder::states::get_holder_model(|_, model| match &model.state.value {
+        get_holder_model(|_, model| match &model.state.value {
             HolderState::Release {
                 sub_state:
                     ReleaseState::ConfirmAuthnMethodRegistration {
@@ -323,8 +317,8 @@ async fn test_releasing() {
             ),
         });
 
-        set_test_ic_agent_response(Encode!(&AuthnMethodConfirmRet::Err(common_canister_impl::components::identity::api::AuthnMethodConfirmationError::WrongCode { retries_left: 3 })).unwrap());
-        crate::handlers::holder::processor::process_holder_with_lock().await;
+        mock_authn_method_confirm_err(AuthnMethodConfirmationError::WrongCode { retries_left: 3 });
+        super::tick().await;
         test_state_matches!(HolderState::Release {
             sub_state: ReleaseState::WaitingAuthnMethodRegistration {
                 confirm_error: Some(ConfirmAuthnMethodRegistrationError { .. }),
@@ -348,8 +342,8 @@ async fn test_releasing() {
                 ..
             });
 
-            set_test_ic_agent_response(Encode!(&common_canister_impl::components::identity::api::AuthnMethodRegistrationModeExitRet::Ok(())).unwrap());
-            crate::handlers::holder::processor::process_holder_with_lock().await;
+            mock_authn_method_registration_mode_exit_ret_ok();
+            super::tick().await;
             pass += 1;
             continue;
         }
@@ -366,7 +360,7 @@ async fn test_releasing() {
             holder_information.identity_number,
             Some(test_identity_number)
         );
-        crate::handlers::holder::states::get_holder_model(|_, model| match &model.state.value {
+        get_holder_model(|_, model| match &model.state.value {
             HolderState::Release {
                 sub_state:
                     ReleaseState::ConfirmAuthnMethodRegistration {
@@ -380,8 +374,8 @@ async fn test_releasing() {
             ),
         });
 
-        set_test_ic_agent_response(Encode!(&AuthnMethodConfirmRet::Ok).unwrap());
-        crate::handlers::holder::processor::process_holder_with_lock().await;
+        mock_authn_method_confirm_ok();
+        super::tick().await;
         test_state_matches!(HolderState::Release {
             sub_state: ReleaseState::CheckingAccessFromOwnerAuthnMethod,
             ..
@@ -400,12 +394,12 @@ async fn test_releasing() {
 
         if pass == 3 {
             // add ecsda key
-            crate::handlers::holder::states::get_holder_model(|_, model| {
+            get_holder_model(|_, model| {
                 set_test_additional_auth(model.get_ecdsa_as_uncompressed_public_key());
             });
-            set_test_ic_agent_response(Encode!(&AuthnMethodRemoveRet::Err).unwrap());
+            mock_authn_method_remove_err();
         }
-        crate::handlers::holder::processor::process_holder_with_lock().await;
+        super::tick().await;
         if pass == 2 {
             test_state_matches!(HolderState::Release {
                 sub_state: ReleaseState::ReleaseFailed {
@@ -424,14 +418,11 @@ async fn test_releasing() {
                 ..
             });
 
-            set_test_ic_agent_response(
-                Encode!(&AuthnMethodRegistrationModeExitRet::Err(
-                    AuthnMethodRegistrationModeExitError::InternalCanisterError("ss".to_owned())
-                ))
-                .unwrap(),
+            mock_authn_method_registration_mode_exit_ret_err(
+                AuthnMethodRegistrationModeExitError::InternalCanisterError("ss".to_owned()),
             );
 
-            crate::handlers::holder::processor::process_holder_with_lock().await;
+            super::tick().await;
 
             test_state_matches!(HolderState::Release {
                 sub_state: ReleaseState::EnterAuthnMethodRegistrationMode {
@@ -452,11 +443,11 @@ async fn test_releasing() {
     }
 
     // add ecsda key
-    crate::handlers::holder::states::get_holder_model(|_, model| {
+    get_holder_model(|_, model| {
         set_test_additional_auth(model.get_ecdsa_as_uncompressed_public_key());
     });
-    set_test_ic_agent_response(Encode!(&AuthnMethodRemoveRet::Ok).unwrap());
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    mock_authn_method_remove_ok();
+    super::tick().await;
     test_state_matches!(HolderState::Closed {
         unsellable_reason: None
     });
@@ -465,15 +456,16 @@ async fn test_releasing() {
 #[tokio::test]
 async fn test_releasing_after_quarantine() {
     let test_identity_number = 779;
-    ht_capture_identity_and_fetch_assets(
+    drive_to_hold(
         2 * HT_SALE_DEAL_SAFE_CLOSE_DURATION,
         ht_get_test_deployer(),
         test_identity_number,
+        &FetchConfig::single_no_neurons(),
     )
     .await;
 
     // END OF QUARANTINE
-    ht_end_quarantine().await;
+    drive_after_quarantine(&FetchConfig::single_no_neurons()).await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::Hold {
             quarantine: None,
@@ -488,15 +480,16 @@ async fn test_releasing_after_quarantine() {
 #[tokio::test]
 async fn test_releasing_in_unsellable_mode() {
     let test_identity_number = 779;
-    ht_capture_identity_and_fetch_assets(
+    drive_to_hold(
         2 * HT_SALE_DEAL_SAFE_CLOSE_DURATION,
         ht_get_test_deployer(),
         test_identity_number,
+        &FetchConfig::single_no_neurons(),
     )
     .await;
 
     // END OF QUARANTINE
-    ht_end_quarantine().await;
+    drive_after_quarantine(&FetchConfig::single_no_neurons()).await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::Hold {
             quarantine: None,
@@ -506,7 +499,7 @@ async fn test_releasing_in_unsellable_mode() {
 
     set_test_time(HT_SALE_DEAL_SAFE_CLOSE_DURATION);
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::Unsellable {
             reason: UnsellableReason::CertificateExpired
@@ -524,10 +517,11 @@ async fn test_releasing_in_unsellable_mode() {
 #[tokio::test]
 async fn test_releasing_in_sale_without_sale_offer() {
     let test_identity_number = 779;
-    ht_capture_identity_and_fetch_assets(
+    drive_to_hold(
         2 * HT_SALE_DEAL_SAFE_CLOSE_DURATION,
         ht_get_test_deployer(),
         test_identity_number,
+        &FetchConfig::single_no_neurons(),
     )
     .await;
 
@@ -551,10 +545,11 @@ async fn test_releasing_in_sale_without_sale_offer() {
 #[tokio::test]
 async fn test_releasing_with_failed_confirmation() {
     let test_identity_number = 780;
-    ht_capture_identity_and_fetch_assets(
+    drive_to_hold(
         2 * HT_SALE_DEAL_SAFE_CLOSE_DURATION,
         ht_get_test_deployer(),
         test_identity_number,
+        &FetchConfig::single_no_neurons(),
     )
     .await;
 
@@ -573,7 +568,7 @@ async fn test_releasing_with_failed_confirmation() {
         sub_state: ReleaseState::StartRelease,
     });
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Release {
         sub_state: ReleaseState::EnterAuthnMethodRegistrationMode {
             registration_id: None
@@ -582,13 +577,8 @@ async fn test_releasing_with_failed_confirmation() {
     });
 
     let expiration_provided = 60_000_000_000;
-    set_test_ic_agent_response(
-        Encode!(&AuthnMethodRegistrationModeEnterRet::Ok {
-            expiration: expiration_provided
-        })
-        .unwrap(),
-    );
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    mock_authn_method_registration_mode_enter_ok(expiration_provided);
+    super::tick().await;
 
     // Attempt with wrong code
     let wrong_code = "9999".to_string();
@@ -600,13 +590,8 @@ async fn test_releasing_with_failed_confirmation() {
     result_ok_with_holder_information!(result);
 
     // Set response to indicate wrong code
-    set_test_ic_agent_response(
-        Encode!(&AuthnMethodConfirmRet::Err(
-            AuthnMethodConfirmationError::WrongCode { retries_left: 2 }
-        ))
-        .unwrap(),
-    );
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    mock_authn_method_confirm_err(AuthnMethodConfirmationError::WrongCode { retries_left: 2 });
+    super::tick().await;
     test_state_matches!(HolderState::Release {
         sub_state: ReleaseState::WaitingAuthnMethodRegistration {
             confirm_error: Some(ConfirmAuthnMethodRegistrationError { .. }),
@@ -624,8 +609,8 @@ async fn test_releasing_with_failed_confirmation() {
         .await;
     result_ok_with_holder_information!(result);
 
-    set_test_ic_agent_response(Encode!(&AuthnMethodConfirmRet::Ok).unwrap());
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    mock_authn_method_confirm_ok();
+    super::tick().await;
     test_state_matches!(HolderState::Release {
         sub_state: ReleaseState::CheckingAccessFromOwnerAuthnMethod,
         ..
@@ -640,11 +625,11 @@ async fn test_releasing_with_failed_confirmation() {
     });
 
     // Add ECDSA key and complete the process
-    crate::handlers::holder::states::get_holder_model(|_, model| {
+    get_holder_model(|_, model| {
         set_test_additional_auth(model.get_ecdsa_as_uncompressed_public_key());
     });
-    set_test_ic_agent_response(Encode!(&AuthnMethodRemoveRet::Ok).unwrap());
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    mock_authn_method_remove_ok();
+    super::tick().await;
     test_state_matches!(HolderState::Closed {
         unsellable_reason: None
     });
@@ -653,15 +638,16 @@ async fn test_releasing_with_failed_confirmation() {
 #[tokio::test]
 async fn test_release_when_fetch_assets() {
     let owner = ht_get_test_deployer();
-    ht_capture_identity_and_fetch_assets_common(
+    drive_to_hold(
         2 * 24 * 60 * 60 * 1000,
         owner,
         HT_CAPTURED_IDENTITY_NUMBER,
+        &FetchConfig::single_no_neurons(),
     )
     .await;
 
     set_test_time(HT_QUARANTINE_DURATION + 1);
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::FetchAssets {
             fetch_assets_state: FetchAssetsState::StartFetchAssets,
@@ -683,15 +669,16 @@ async fn test_release_when_fetch_assets() {
 #[tokio::test]
 async fn test_release_when_check_assets() {
     let owner = ht_get_test_deployer();
-    ht_capture_identity_and_fetch_assets_common(
+    drive_to_hold(
         2 * 24 * 60 * 60 * 1000,
         owner,
         HT_CAPTURED_IDENTITY_NUMBER,
+        &FetchConfig::single_no_neurons(),
     )
     .await;
 
     set_test_time(HT_QUARANTINE_DURATION + 1);
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::FetchAssets {
             fetch_assets_state: FetchAssetsState::StartFetchAssets,
@@ -699,9 +686,9 @@ async fn test_release_when_check_assets() {
         }
     });
 
-    ht_fetch_assets().await;
+    drive_to_finish_fetch_assets(&FetchConfig::single_no_neurons()).await;
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::CheckAssets {
             sub_state: CheckAssetsState::StartCheckAssets,
@@ -723,15 +710,16 @@ async fn test_release_when_check_assets() {
 #[tokio::test]
 async fn test_release_when_validate_assets() {
     let owner = ht_get_test_deployer();
-    ht_capture_identity_and_fetch_assets_common(
+    drive_to_hold(
         2 * 24 * 60 * 60 * 1000,
         owner,
         HT_CAPTURED_IDENTITY_NUMBER,
+        &FetchConfig::single_no_neurons(),
     )
     .await;
 
     set_test_time(HT_QUARANTINE_DURATION + 1);
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::FetchAssets {
             fetch_assets_state: FetchAssetsState::StartFetchAssets,
@@ -739,9 +727,9 @@ async fn test_release_when_validate_assets() {
         }
     });
 
-    ht_fetch_assets().await;
+    drive_to_finish_fetch_assets(&FetchConfig::single_no_neurons()).await;
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::CheckAssets {
             sub_state: CheckAssetsState::StartCheckAssets,
@@ -749,14 +737,14 @@ async fn test_release_when_validate_assets() {
         }
     });
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
+    super::tick().await;
+    super::tick().await;
+    super::tick().await;
+    super::tick().await;
+    super::tick().await;
+    super::tick().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::ValidateAssets { .. },
     });

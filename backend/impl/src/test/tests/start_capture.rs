@@ -1,10 +1,9 @@
 use candid::{CandidType, Decode, Encode};
 use common_canister_impl::{
     components::identity::api::{
-        Aud, AuthnMethod, AuthnMethodConfirmationCode, AuthnMethodData, AuthnMethodProtection,
-        AuthnMethodPurpose, AuthnMethodRegisterRet, AuthnMethodRegistrationInfo,
-        AuthnMethodRegistrationModeExitError, AuthnMethodSecuritySettings, IdentityInfo,
-        IdentityInfoError, IdentityInfoRet, MetadataMapV2, OpenIdCredential, WebAuthn,
+        Aud, AuthnMethod, AuthnMethodData, AuthnMethodProtection, AuthnMethodPurpose,
+        AuthnMethodRegistrationInfo, AuthnMethodSecuritySettings, IdentityInfo, IdentityInfoError,
+        IdentityInfoRet, MetadataMapV2, OpenIdCredential, WebAuthn,
     },
     handlers::ic_request::public_key::uncompressed_public_key_to_asn1_block,
 };
@@ -27,14 +26,18 @@ use crate::{
             ecdsa::PUBLIC_KEY, ic::set_test_caller, ic_agent::set_test_ic_agent_response,
             time::set_test_time,
         },
-        holder_auth_registration::ht_holder_authn_method_registration,
-        ht_get_test_deployer, ht_get_test_hub_canister, HT_CAPTURED_IDENTITY_NUMBER,
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION,
+        holder_auth_registration::{
+            ht_advance_to_exit_authn_method_registration, ht_holder_authn_method_registration,
+        },
+        ht_get_test_deployer, ht_get_test_hub_canister,
+        support::mocks::{
+            mock_authn_method_registration_mode_exit_ok, mock_obtain_hub_canister_ok,
+        },
+        HT_CAPTURED_IDENTITY_NUMBER, HT_SALE_DEAL_SAFE_CLOSE_DURATION, TEST_CAPTURE_HOSTNAME,
     },
     test_state_matches,
     updates::holder::{
         cancel_capture_identity::cancel_capture_identity_int,
-        confirm_holder_authn_method_registration::confirm_holder_authn_method_registration_int,
         start_capture_identity::start_capture_identity_int,
     },
 };
@@ -68,12 +71,12 @@ async fn test_start_capture() {
         sub_state: CaptureState::StartCapture,
     });
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Capture {
         sub_state: CaptureState::CreateEcdsaKey,
     });
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Capture {
         sub_state: CaptureState::RegisterAuthnMethodSession,
     });
@@ -205,47 +208,17 @@ async fn test_identity_api_changed() {
     )
     .await;
 
-    set_test_ic_agent_response(
-        Encode!(&AuthnMethodRegisterRet::Ok(AuthnMethodConfirmationCode {
-            confirmation_code: "cc".to_owned(),
-            expiration: 4444_000_000,
-        }))
-        .unwrap(),
-    );
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    ht_advance_to_exit_authn_method_registration().await;
+    // State: ExitAndRegisterHolderAuthnMethod { TEST_CAPTURE_HOSTNAME }
 
-    get_holder_model(|_, model| match &model.state.value {
-        HolderState::Capture {
-            sub_state:
-                CaptureState::NeedConfirmAuthnMethodSessionRegistration {
-                    confirmation_code,
-                    expiration,
-                },
-        } => {
-            assert_eq!(confirmation_code, &"cc".to_owned());
-            assert_eq!(expiration, &4444);
-        }
-        _ => panic!("Unexpected state"),
-    });
-
-    let hostname = "aa.bb.cc".to_owned();
-    let result = confirm_holder_authn_method_registration_int(hostname.clone()).await;
-    let _ = result_ok_with_holder_information!(result);
-    test_state_matches!(HolderState::Capture {
-        sub_state: CaptureState::ExitAndRegisterHolderAuthnMethod { frontend_hostname },
-    } if frontend_hostname == &hostname);
-
-    let result: Result<(), AuthnMethodRegistrationModeExitError> = Ok(());
-    set_test_ic_agent_response(Encode!(&result).unwrap());
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-
+    mock_authn_method_registration_mode_exit_ok();
+    super::tick().await;
     test_state_matches!(HolderState::Capture {
         sub_state: CaptureState::GetHolderContractPrincipal { frontend_hostname },
-    } if frontend_hostname == &hostname);
+    } if frontend_hostname == TEST_CAPTURE_HOSTNAME);
 
-    set_test_ic_agent_response(Encode!(&ht_get_test_hub_canister()).unwrap());
-
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    mock_obtain_hub_canister_ok(ht_get_test_hub_canister());
+    super::tick().await;
     test_state_matches!(HolderState::Capture {
         sub_state: CaptureState::ObtainingIdentityAuthnMethods,
     });
@@ -284,7 +257,7 @@ async fn test_identity_api_changed() {
         .unwrap(),
     );
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Release {
         release_initiation: ReleaseInitiation::IdentityAPIChanged,
         sub_state: ReleaseState::IdentityAPIChanged,

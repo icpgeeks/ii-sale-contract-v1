@@ -1,6 +1,9 @@
 #[cfg(test)]
 mod tests {
 
+    pub(crate) mod drivers;
+    pub(crate) mod support;
+
     mod activate_contract;
     mod add_contract_controller;
     mod check_assets;
@@ -41,7 +44,14 @@ mod tests {
     use common_contract_api::{ContractCertificate, SignedContractCertificate};
     use ic_ledger_types::AccountIdentifier;
 
-    pub const HT_CAPTURED_IDENTITY_NUMBER: u64 = 555;
+    /// Shorthand for `process_holder_with_lock().await` — advances the state machine one step.
+    ///
+    /// Use this everywhere instead of the full
+    /// `crate::handlers::holder::processor::process_holder_with_lock().await`
+    /// to keep test code concise.
+    pub(crate) async fn tick() {
+        crate::handlers::holder::processor::process_holder_with_lock().await;
+    }
 
     pub(crate) fn ht_get_test_hub_canister() -> Principal {
         Principal::from_text("xapqu-4qaaa-aaaak-quexq-cai").unwrap()
@@ -100,7 +110,7 @@ mod tests {
         ht_init_contract(args, settings);
     }
 
-    pub(crate) fn ht_init_contract(args: InitContractArgs, settings: Settings) {
+    fn ht_init_contract(args: InitContractArgs, settings: Settings) {
         ht_init_contract_int(args, |model| {
             ht_create_environment(
                 IcTest {
@@ -117,7 +127,7 @@ mod tests {
         });
     }
 
-    pub(crate) fn ht_init_contract_int<F>(args: InitContractArgs, env_builder: F)
+    fn ht_init_contract_int<F>(args: InitContractArgs, env_builder: F)
     where
         F: FnOnce(&ContractModel) -> Environment,
     {
@@ -125,7 +135,7 @@ mod tests {
         init_state(CanisterState::new(env_builder(&model), model));
     }
 
-    pub fn ht_create_environment(ic: IcTest, settings: Settings) -> Environment {
+    pub(crate) fn ht_create_environment(ic: IcTest, settings: Settings) -> Environment {
         Environment::new(
             Box::new(PrintLoggerImpl {}),
             Box::new(TimeTest {}),
@@ -154,15 +164,60 @@ mod tests {
         )
     }
 
-    pub const HT_SALE_DEAL_SAFE_CLOSE_DURATION: u64 = 24 * 60 * 60 * 1000;
-    pub const HT_QUARANTINE_DURATION: u64 = 10 * 60_000;
-    pub const HT_MIN_PRICE: u64 = 100_000_000;
-    pub const HT_DEVELOPER_REWARDS_PERMYRIAD: u32 = 1_000;
-    pub const HT_REFERRAL_REWARDS_PERMYRIAD: u32 = 1_000;
-    pub const HT_HUB_REWARDS_PERMYRIAD: u32 = 1_000;
+    // =========================================================================
+    // Test constants
+    // =========================================================================
+
+    /// Identity number captured during test setup.
+    pub(crate) const HT_CAPTURED_IDENTITY_NUMBER: u64 = 555;
+
+    // --- Sale / timing constants ---
+    pub(crate) const HT_SALE_DEAL_SAFE_CLOSE_DURATION: u64 = 24 * 60 * 60 * 1000;
+    pub(crate) const HT_QUARANTINE_DURATION: u64 = 10 * 60_000;
+    pub(crate) const HT_MIN_PRICE: u64 = 100_000_000;
+
+    // --- Reward permyriad constants ---
+    pub(crate) const HT_DEVELOPER_REWARDS_PERMYRIAD: u32 = 1_000;
+    pub(crate) const HT_REFERRAL_REWARDS_PERMYRIAD: u32 = 1_000;
+    pub(crate) const HT_HUB_REWARDS_PERMYRIAD: u32 = 1_000;
+
+    // --- Delegation / fetch constants ---
+
+    // --- Capture / authn method registration constants ---
+
+    /// Confirmation code returned by the mock authn-method registration response.
+    pub(crate) const TEST_AUTHN_CONFIRMATION_CODE: &str = "cc";
+    /// Hostname used when confirming holder authn-method registration in tests.
+    pub(crate) const TEST_CAPTURE_HOSTNAME: &str = "aa.bb.cc";
+    /// Expiration timestamp (nanoseconds) returned by the mock authn-method registration response.
+    pub(crate) const TEST_AUTHN_REGISTER_EXPIRATION_NANOS: u64 = 4_444_000_000;
+    /// Expiration timestamp (milliseconds) — nanos / 1_000_000.
+    pub(crate) const TEST_AUTHN_REGISTER_EXPIRATION_MILLIS: u64 = 4_444;
+
+    /// Delegation public key used by default in fetch-asset tests.
+    pub(crate) const TEST_DELEGATION_KEY_1: &[u8] = &[1];
+    /// Alternative delegation public key for second identity account in multi-account tests.
+    pub(crate) const TEST_DELEGATION_KEY_2: &[u8] = &[2];
+    /// Delegation expiration timestamp used in fetch-asset tests.
+    pub(crate) const TEST_DELEGATION_EXPIRATION: u64 = 234_213_412_341_234;
+    /// Hostname used when constructing test delegation data.
+    pub(crate) const TEST_DELEGATION_HOSTNAME: &str = "a.b.c";
+
+    /// Number of sequential sub-account check iterations in the CheckAssets phase.
+    ///
+    /// INVARIANT: must equal
+    /// `Settings::default_number_of_subaccounts_to_check_for_no_approve`
+    /// as configured in `ht_create_settings()`.  A `debug_assert_eq!` in
+    /// `ht_create_settings` enforces this at runtime during test builds.
+    ///
+    /// The driver loop `for _ in 0..=HT_SEQUENTIAL_CHECK_STEPS` covers:
+    ///   - iteration 0   : CheckAccountsForNoApprovePrepare → Sequential (first sub-account)
+    ///   - iterations 1‥4: advance through remaining sub-accounts (incl. main sub-account 0)
+    /// One tick after the loop transitions to FinishCheckAssets.
+    pub(crate) const HT_SEQUENTIAL_CHECK_STEPS: usize = 4;
 
     pub(crate) fn ht_create_settings() -> Settings {
-        Settings {
+        let settings = Settings {
             ic_url: "https://icp0.io/".to_owned(),
             nns_hostname: "https://nns.ic0.app".to_owned(),
             processing_lock_duration: 60_000,
@@ -174,7 +229,7 @@ mod tests {
             fetch_neurons_information_chunk_count: 10,
             quarantine_duration: HT_QUARANTINE_DURATION,
             sale_deal_safe_close_duration: HT_SALE_DEAL_SAFE_CLOSE_DURATION,
-            default_number_of_subaccounts_to_check_for_no_approve: 4,
+            default_number_of_subaccounts_to_check_for_no_approve: HT_SEQUENTIAL_CHECK_STEPS,
             developer_reward_permyriad: HT_DEVELOPER_REWARDS_PERMYRIAD,
             referral_reward_permyriad: HT_REFERRAL_REWARDS_PERMYRIAD,
             hub_reward_permyriad: HT_HUB_REWARDS_PERMYRIAD,
@@ -198,7 +253,16 @@ mod tests {
             max_subaccounts_allowed: 5,
             warning_cycles_threshold_percentage: 30,
             critical_cycles_threshold_percentage: 10,
-        }
+        };
+        debug_assert_eq!(
+            settings.default_number_of_subaccounts_to_check_for_no_approve,
+            HT_SEQUENTIAL_CHECK_STEPS,
+            "HT_SEQUENTIAL_CHECK_STEPS ({}) must equal \
+             Settings::default_number_of_subaccounts_to_check_for_no_approve ({})",
+            HT_SEQUENTIAL_CHECK_STEPS,
+            settings.default_number_of_subaccounts_to_check_for_no_approve
+        );
+        settings
     }
 }
 

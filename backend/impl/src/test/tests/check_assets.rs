@@ -1,75 +1,40 @@
 use std::{i32, u64};
 
 use candid::{Encode, Principal};
-use common_canister_impl::components::{
-    identity::api::{
-        Delegation, GetAccountsError, GetAccountsResponse, GetDelegationResponse,
-        PrepareAccountDelegation, PrepareAccountDelegationRet, SignedDelegation,
-    },
-    nns::api::{
-        BallotInfo, DissolveState, Followees, ListNeuronsResponse, Neuron, NeuronId, NeuronInfo,
-        NeuronStakeTransfer, ProposalId,
-    },
-    nns_dap::api::{AccountDetails, GetAccountResponse, SubAccountDetails},
+use common_canister_impl::components::nns::api::{
+    BallotInfo, DissolveState, Followees, ListNeuronsResponse, Neuron, NeuronId, NeuronInfo,
+    NeuronStakeTransfer, ProposalId,
 };
-use common_canister_types::TimestampMillis;
-use contract_canister_api::{
-    receive_delegation::ReceiveDelegationError,
-    types::holder::{
-        CheckAssetsState, DelegationData, DelegationState, FetchAssetsEvent, FetchAssetsState,
-        FetchIdentityAccountsNnsAssetsState, FetchNnsAssetsState, HolderProcessingEvent,
-        HolderState, HoldingProcessingEvent, HoldingState, ObtainDelegationEvent, UnsellableReason,
-    },
+use contract_canister_api::types::holder::{
+    CheckAssetsState, FetchAssetsState, HolderState, HoldingState, UnsellableReason,
 };
-use ic_ledger_types::{AccountIdentifier, Subaccount};
 use icrc_ledger_types::icrc1::account::Account;
 use serde_bytes::ByteBuf;
 
 use crate::{
-    handlers::holder::{processor::update_holder_with_lock, states::get_holder_model},
-    result_err_matches,
+    handlers::holder::states::get_holder_model,
     test::tests::{
-        components::{
-            allowance_ledger::ht_approve_account, ic::set_test_caller,
-            ic_agent::set_test_ic_agent_response, ledger::ht_deposit_account, time::set_test_time,
+        components::{allowance_ledger::ht_approve_account, time::set_test_time},
+        drivers::{
+            capture::drive_to_captured,
+            fetch::{drive_to_finish_fetch_assets, drive_to_hold, FetchConfig},
         },
-        holder_auth_registration::ht_capture_identity,
-        ht_get_test_deployer, ht_get_test_hub_canister, HT_CAPTURED_IDENTITY_NUMBER,
-        HT_QUARANTINE_DURATION,
+        ht_get_test_deployer, HT_CAPTURED_IDENTITY_NUMBER, HT_QUARANTINE_DURATION,
     },
     test_state_matches,
-    updates::holder::receive_delegation::receive_delegation_int,
 };
 
-#[tokio::test]
-async fn test_check_assets_happy_path() {
-    ht_capture_identity_and_fetch_assets_common(
-        2 * 24 * 60 * 60 * 1000,
-        ht_get_test_deployer(),
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-}
+// ---------------------------------------------------------------------------
+// Local helpers
+// ---------------------------------------------------------------------------
 
-#[tokio::test]
-async fn test_check_assets_have_approve() {
-    ht_capture_identity(
-        2 * 24 * 60 * 60 * 1000,
-        ht_get_test_deployer(),
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-    ht_fetch_assets().await;
-
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::CheckAssets {
-            sub_state: CheckAssetsState::StartCheckAssets,
-            ..
-        }
-    });
-
-    let identity_principal = get_holder_model(|_, model| {
+/// Extracts the delegation-controller principal of the default identity account
+/// (the one with `identity_account_number == None`) from `model.fetching_assets`.
+///
+/// **Precondition:** the state machine is in or just past `FinishFetchAssets` and
+/// `fetching_assets` has not yet been cleared (i.e. before `StartHolding`).
+fn ht_get_default_identity_principal_from_fetching_assets() -> Principal {
+    get_holder_model(|_, model| {
         model
             .fetching_assets
             .as_ref()
@@ -80,12 +45,100 @@ async fn test_check_assets_have_approve() {
                     .find(|a| a.identity_account_number.is_none())
             })
             .and_then(|account| account.principal)
-            .unwrap()
+            .expect("default identity account principal not found in fetching_assets")
+    })
+}
+
+/// Advances the state machine one tick at a time (up to 10 ticks) until it lands in
+/// `HoldingState::Unsellable`. Panics if `Unsellable` is not reached within the budget.
+async fn tick_until_unsellable() {
+    for _ in 0..10 {
+        super::tick().await;
+        let done = get_holder_model(|_, model| {
+            matches!(
+                &model.state.value,
+                HolderState::Holding {
+                    sub_state: HoldingState::Unsellable { .. }
+                }
+            )
+        });
+        if done {
+            return;
+        }
+    }
+    panic!("tick_until_unsellable: Unsellable state not reached within 10 ticks");
+}
+
+// ---------------------------------------------------------------------------
+// test_check_assets_happy_path
+// ---------------------------------------------------------------------------
+
+/// Full happy-path: capture → fetch → check → Hold.
+#[tokio::test]
+async fn test_check_assets_happy_path() {
+    drive_to_hold(
+        2 * 24 * 60 * 60 * 1000,
+        ht_get_test_deployer(),
+        HT_CAPTURED_IDENTITY_NUMBER,
+        &FetchConfig::single_no_neurons(),
+    )
+    .await;
+
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::Hold {
+            quarantine: Some(HT_QUARANTINE_DURATION),
+            sale_deal_state: None
+        }
     });
 
+    get_holder_model(|_, model| {
+        assert!(model.assets.is_some(), "assets should be saved after Hold");
+        assert!(
+            model.fetching_assets.is_none(),
+            "fetching_assets should be cleared after Hold"
+        );
+    });
+}
+
+// ---------------------------------------------------------------------------
+// test_check_assets_have_approve
+// ---------------------------------------------------------------------------
+
+/// If any sub-account has an active allowance approval to the deployer,
+/// the check phase detects it and transitions to Unsellable::ApproveOnAccount.
+#[tokio::test]
+async fn test_check_assets_have_approve() {
+    // Reach StartFetchAssets
+    drive_to_captured(
+        2 * 24 * 60 * 60 * 1000,
+        ht_get_test_deployer(),
+        HT_CAPTURED_IDENTITY_NUMBER,
+    )
+    .await;
+
+    // Drive through fetch phase, stopping at FinishFetchAssets.
+    // Uses real sub-accounts with deposited balances so the check phase
+    // has actual accounts to inspect for approvals.
+    drive_to_finish_fetch_assets(&FetchConfig::single_with_test_sub_accounts()).await;
+    // State: FinishFetchAssets
+
+    // FinishFetchAssets → StartCheckAssets
+    super::tick().await;
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::CheckAssets {
+            sub_state: CheckAssetsState::StartCheckAssets,
+            ..
+        }
+    });
+
+    // Extract principal from fetching_assets before it's cleared
+    let identity_principal = ht_get_default_identity_principal_from_fetching_assets();
+
     let subaccount = [0u8; 32];
-    for i in 2..4 {
-        let mut msubaccount = subaccount.clone();
+
+    // Place zero-amount approvals on sub-accounts 2 and 3
+    for i in 2u8..4 {
+        let mut msubaccount = subaccount;
         msubaccount[31] = i;
         ht_approve_account(
             Account {
@@ -98,8 +151,10 @@ async fn test_check_assets_have_approve() {
             },
             0,
             0,
-        )
+        );
     }
+
+    // Non-zero approval on the main subaccount — triggers Unsellable
     ht_approve_account(
         Account {
             owner: identity_principal,
@@ -113,7 +168,8 @@ async fn test_check_assets_have_approve() {
         1,
     );
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    // StartCheckAssets → CheckAccountsForNoApprovePrepare
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::CheckAssets {
             sub_state: CheckAssetsState::CheckAccountsForNoApprovePrepare,
@@ -121,12 +177,9 @@ async fn test_check_assets_have_approve() {
         }
     });
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    // Tick until Unsellable (sequential scan detects the approval)
+    tick_until_unsellable().await;
+
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::Unsellable {
             reason: UnsellableReason::ApproveOnAccount { .. }
@@ -135,17 +188,25 @@ async fn test_check_assets_have_approve() {
     });
 }
 
+// ---------------------------------------------------------------------------
+// test_check_assets_have_approve_after_quarantine
+// ---------------------------------------------------------------------------
+
+/// Same scenario triggered during the quarantine re-fetch (second fetch cycle).
 #[tokio::test]
 async fn test_check_assets_have_approve_after_quarantine() {
-    ht_capture_identity_and_fetch_assets_common(
+    // First cycle: reach Hold normally
+    drive_to_hold(
         2 * 24 * 60 * 60 * 1000,
         ht_get_test_deployer(),
         HT_CAPTURED_IDENTITY_NUMBER,
+        &FetchConfig::single_no_neurons(),
     )
     .await;
 
+    // Advance time past quarantine → re-fetch begins
     set_test_time(HT_QUARANTINE_DURATION + 1);
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::FetchAssets {
             fetch_assets_state: FetchAssetsState::StartFetchAssets,
@@ -153,22 +214,16 @@ async fn test_check_assets_have_approve_after_quarantine() {
         }
     });
 
-    ht_fetch_assets().await;
+    // Second fetch: drive to FinishFetchAssets with real sub-accounts
+    drive_to_finish_fetch_assets(&FetchConfig::single_with_test_sub_accounts()).await;
+    // State: FinishFetchAssets
 
-    let identity_principal = get_holder_model(|_, model| {
-        model
-            .fetching_assets
-            .as_ref()
-            .and_then(|fa| fa.nns_assets.as_ref())
-            .and_then(|accounts| {
-                accounts
-                    .iter()
-                    .find(|a| a.identity_account_number.is_none())
-            })
-            .and_then(|account| account.principal)
-            .unwrap()
-    });
+    // Extract principal from fetching_assets
+    let identity_principal = ht_get_default_identity_principal_from_fetching_assets();
+
     let subaccount = [0u8; 32];
+
+    // Place a non-zero approval → will trigger Unsellable during check
     ht_approve_account(
         Account {
             owner: identity_principal,
@@ -182,7 +237,8 @@ async fn test_check_assets_have_approve_after_quarantine() {
         1,
     );
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    // FinishFetchAssets → StartCheckAssets
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::CheckAssets {
             sub_state: CheckAssetsState::StartCheckAssets,
@@ -190,27 +246,27 @@ async fn test_check_assets_have_approve_after_quarantine() {
         }
     });
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    // StartCheckAssets → CheckAccountsForNoApprovePrepare
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::CheckAssets {
             sub_state: CheckAssetsState::CheckAccountsForNoApprovePrepare,
             ..
         }
     });
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+
+    // First sequential step
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::CheckAssets {
             sub_state: CheckAssetsState::CheckAccountsForNoApproveSequential { .. },
             ..
         }
     });
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+
+    // Tick until Unsellable
+    tick_until_unsellable().await;
+
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::Unsellable {
             reason: UnsellableReason::ApproveOnAccount { .. }
@@ -219,325 +275,32 @@ async fn test_check_assets_have_approve_after_quarantine() {
     });
 }
 
-pub(crate) async fn ht_capture_identity_and_fetch_assets_common(
-    certificate_expiration: TimestampMillis,
-    contract_owner: Principal,
-    identity_number: u64,
-) {
-    ht_capture_identity(certificate_expiration, contract_owner, identity_number).await;
-    ht_fetch_assets().await;
-    ht_check_assets().await;
+// ---------------------------------------------------------------------------
+// test_neuron_lists_length
+// ---------------------------------------------------------------------------
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::StartHolding
-    });
-    get_holder_model(|_, model| {
-        assert!(model.assets.is_none());
-        assert!(model.fetching_assets.is_some());
-    });
-
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: Some(HT_QUARANTINE_DURATION),
-            sale_deal_state: None
-        }
-    });
-    get_holder_model(|_, model| {
-        assert!(model.assets.is_some());
-        assert!(model.fetching_assets.is_none());
-    });
-}
-
-pub(crate) async fn ht_fetch_assets() {
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::FetchAssets {
-            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
-                sub_state: FetchIdentityAccountsNnsAssetsState::GetIdentityAccounts,
-            },
-            ..
-        }
-    });
-
-    set_test_ic_agent_response({
-        let m: Result<GetAccountsResponse, GetAccountsError> = Err(GetAccountsError::NoAccounts);
-        Encode!(&m).unwrap()
-    });
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::FetchAssets {
-            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
-                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
-                    sub_state: FetchNnsAssetsState::ObtainDelegationState {
-                        sub_state: DelegationState::NeedPrepareDelegation { .. },
-                        ..
-                    },
-                    ..
-                },
-            },
-            ..
-        }
-    });
-
-    set_test_ic_agent_response({
-        let m: PrepareAccountDelegationRet = Ok(PrepareAccountDelegation {
-            user_key: vec![1u8].into(),
-            expiration: 234213412341234u64,
-        });
-        Encode!(&m).unwrap()
-    });
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::FetchAssets {
-            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
-                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
-                    sub_state: FetchNnsAssetsState::ObtainDelegationState {
-                        sub_state: DelegationState::GetDelegationWaiting { .. },
-                        ..
-                    },
-                    ..
-                },
-            },
-            ..
-        }
-    });
-
-    set_test_caller(ht_get_test_hub_canister());
-
-    result_err_matches!(
-        receive_delegation_int(Encode!(&GetDelegationResponse::NoSuchDelegation).unwrap()).await,
-        ReceiveDelegationError::ResponseNotContainsDelegation
-    );
-
-    let get_delegation_response =
-        Encode!(&GetDelegationResponse::SignedDelegation(SignedDelegation {
-            signature: vec![].into(),
-            delegation: Delegation {
-                pubkey: vec![].into(),
-                targets: None,
-                expiration: 234213412341234
-            }
-        }))
-        .unwrap();
-
-    result_err_matches!(
-        receive_delegation_int(get_delegation_response).await,
-        ReceiveDelegationError::DelegationWrong { .. }
-    );
-
-    assert!(update_holder_with_lock(HolderProcessingEvent::Holding {
-        event: HoldingProcessingEvent::FetchAssets {
-            event: FetchAssetsEvent::ObtainDelegation {
-                event: ObtainDelegationEvent::DelegationGot {
-                    delegation_data: DelegationData {
-                        hostname: "a.b.c".to_owned(),
-                        public_key: vec![1].into(),
-                        timestamp: 234213412341234,
-                        signature: vec![].into(),
-                    },
-                },
-            },
-        },
-    })
-    .is_ok());
-
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::FetchAssets {
-            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
-                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
-                    sub_state: FetchNnsAssetsState::GetNeuronsIds,
-                    ..
-                },
-            },
-            ..
-        }
-    });
-
-    set_test_ic_agent_response(Encode!(&vec![1u64]).unwrap());
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::FetchAssets {
-            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
-                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
-                    sub_state: FetchNnsAssetsState::GetNeuronsInformation { .. },
-                    ..
-                },
-            },
-            ..
-        }
-    });
-
-    let identity_principal =
-        get_holder_model(|_, model| model.get_delegation_controller().unwrap());
-
-    set_test_ic_agent_response(
-        Encode!(&ListNeuronsResponse {
-            neuron_infos: vec![],
-            full_neurons: vec![],
-            total_pages_available: None
-        })
-        .unwrap(),
-    );
-
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::FetchAssets {
-            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
-                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
-                    sub_state: FetchNnsAssetsState::GetNeuronsInformation { .. },
-                    ..
-                },
-            },
-            ..
-        }
-    });
-
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::FetchAssets {
-            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
-                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
-                    sub_state: FetchNnsAssetsState::DeletingNeuronsHotkeys { .. },
-                    ..
-                },
-            },
-            ..
-        }
-    });
-
-    let subaccount = [0u8; 32];
-    set_test_ic_agent_response(
-        Encode!(&GetAccountResponse::Ok(AccountDetails {
-            principal: identity_principal,
-            account_identifier: AccountIdentifier::new(
-                &identity_principal,
-                &Subaccount(subaccount)
-            )
-            .to_hex(),
-            hardware_wallet_accounts: vec![],
-            sub_accounts: (1..4)
-                .map(|i| {
-                    let mut msubaccount = subaccount.clone();
-                    msubaccount[31] = 4 - i;
-                    let account_identifier =
-                        AccountIdentifier::new(&identity_principal, &Subaccount(msubaccount));
-                    ht_deposit_account(&account_identifier, 5_000_000 + i as u64 * 1_000);
-                    SubAccountDetails {
-                        name: format!("SubAccount{}", i + 1),
-                        sub_account: msubaccount.to_vec().into(),
-                        account_identifier: account_identifier.to_hex(),
-                    }
-                })
-                .collect()
-        }))
-        .unwrap(),
-    );
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::FetchAssets {
-            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
-                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
-                    sub_state: FetchNnsAssetsState::GetAccountsInformation,
-                    ..
-                },
-            },
-            ..
-        }
-    });
-    for i in 0..=4 {
-        println!("Processing fetch account balance {}", i);
-        // fetch all 5 accounts balances
-        crate::handlers::holder::processor::process_holder_with_lock().await;
-        test_state_matches!(HolderState::Holding {
-            sub_state: HoldingState::FetchAssets {
-                fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
-                    sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
-                        sub_state: FetchNnsAssetsState::GetAccountsBalances,
-                        ..
-                    },
-                },
-                ..
-            }
-        });
-    }
-
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::FetchAssets {
-            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
-                sub_state: FetchIdentityAccountsNnsAssetsState::FinishCurrentNnsAccountFetch { .. },
-            },
-            ..
-        }
-    });
-
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::FetchAssets {
-            fetch_assets_state: FetchAssetsState::FinishFetchAssets,
-            ..
-        }
-    });
-}
-
-pub async fn ht_check_assets() {
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::CheckAssets {
-            sub_state: CheckAssetsState::StartCheckAssets,
-            ..
-        }
-    });
-
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::CheckAssets {
-            sub_state: CheckAssetsState::CheckAccountsForNoApprovePrepare,
-            ..
-        }
-    });
-
-    for _i in 0..=4 {
-        // fetch all 5 accounts balances
-        crate::handlers::holder::processor::process_holder_with_lock().await;
-        test_state_matches!(HolderState::Holding {
-            sub_state: HoldingState::CheckAssets {
-                sub_state: CheckAssetsState::CheckAccountsForNoApproveSequential { .. },
-                ..
-            }
-        });
-    }
-
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::CheckAssets {
-            sub_state: CheckAssetsState::FinishCheckAssets,
-            ..
-        }
-    });
-}
-
+/// Verifies that a maximally-sized `ListNeuronsResponse` candid-encodes within
+/// the expected byte budget. This is a regression guard against unbounded growth.
 #[tokio::test]
 async fn test_neuron_lists_length() {
-    let mut recent_ballots = Vec::new();
-    for _ in 0..100 {
-        recent_ballots.push(BallotInfo {
-            vote: i32::MAX,
-            proposal_id: Some(ProposalId { id: u64::MAX }),
-        });
-    }
-
     let principal =
         Principal::from_text("6cbt4-ztfyf-7ldym-o2owg-geomw-bkgiy-uuzey-dq4ad-hsly3-txpo7-3qe")
             .unwrap();
+
+    let make_ballots = || {
+        (0..100)
+            .map(|_| BallotInfo {
+                vote: i32::MAX,
+                proposal_id: Some(ProposalId { id: u64::MAX }),
+            })
+            .collect::<Vec<_>>()
+    };
 
     let neuron = Neuron {
         id: Some(NeuronId { id: u64::MAX }),
         staked_maturity_e8s_equivalent: Some(u64::MAX),
         controller: Some(principal),
-        recent_ballots,
+        recent_ballots: make_ballots(),
         voting_power_refreshed_timestamp_seconds: Some(u64::MAX),
         kyc_verified: true,
         potential_voting_power: Some(u64::MAX),
@@ -602,17 +365,9 @@ async fn test_neuron_lists_length() {
         spawn_at_timestamp_seconds: Some(u64::MAX),
     };
 
-    let mut recent_ballots = Vec::new();
-    for _ in 0..100 {
-        recent_ballots.push(BallotInfo {
-            vote: i32::MAX,
-            proposal_id: Some(ProposalId { id: u64::MAX }),
-        });
-    }
-
     let info = NeuronInfo {
         dissolve_delay_seconds: u64::MAX,
-        recent_ballots,
+        recent_ballots: make_ballots(),
         voting_power_refreshed_timestamp_seconds: Some(u64::MAX),
         potential_voting_power: Some(u64::MAX),
         neuron_type: Some(i32::MAX),
