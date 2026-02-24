@@ -3,7 +3,7 @@ use std::ops::Deref;
 use candid::{Encode, Principal};
 use common_canister_impl::components::{
     identity::api::{
-        Delegation, GetAccountsError, GetAccountsResponse, GetDelegationResponse,
+        AccountInfo, Delegation, GetAccountsError, GetAccountsResponse, GetDelegationResponse,
         PrepareAccountDelegation, PrepareAccountDelegationRet, SignedDelegation,
     },
     nns::api::{ListNeuronsResponse, Neuron, NeuronId},
@@ -795,6 +795,327 @@ fn _fake_neuron_int(
         known_neuron_data: None,
         spawn_at_timestamp_seconds: None,
     }
+}
+
+#[tokio::test]
+async fn test_fetch_assets_multiple_accounts() {
+    ht_capture_identity(
+        2 * 24 * 60 * 60 * 1000,
+        ht_get_test_deployer(),
+        HT_CAPTURED_IDENTITY_NUMBER,
+    )
+    .await;
+
+    ht_fetch_assets_multiple_accounts().await;
+
+    // FinishCheckAssets → StartHolding (assets не сохранены в model.assets ещё)
+    crate::handlers::holder::processor::process_holder_with_lock().await;
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::StartHolding
+    });
+    get_holder_model(|_, model| {
+        assert!(model.assets.is_none());
+        assert!(model.fetching_assets.is_some());
+        let nns_assets = model
+            .fetching_assets
+            .as_ref()
+            .unwrap()
+            .nns_assets
+            .as_ref()
+            .unwrap();
+        assert_eq!(nns_assets.len(), 2, "should have 2 identity account slots");
+        assert!(
+            nns_assets[0].assets.is_some(),
+            "default account (None) should have fetched assets"
+        );
+        assert!(
+            nns_assets[1].assets.is_some(),
+            "account Some(1) should have fetched assets"
+        );
+    });
+
+    // StartHolding → Hold (assets сохраняются в model.assets)
+    crate::handlers::holder::processor::process_holder_with_lock().await;
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::Hold {
+            quarantine: Some(HT_QUARANTINE_DURATION),
+            sale_deal_state: None
+        }
+    });
+    get_holder_model(|_, model| {
+        assert!(model.assets.is_some());
+        assert!(model.fetching_assets.is_none());
+        let nns_assets = model
+            .assets
+            .as_ref()
+            .unwrap()
+            .value
+            .nns_assets
+            .as_ref()
+            .unwrap();
+        assert_eq!(
+            nns_assets.len(),
+            2,
+            "assets should contain 2 identity accounts"
+        );
+        assert_eq!(
+            nns_assets[0].identity_account_number, None,
+            "first slot should be the default account"
+        );
+        assert_eq!(
+            nns_assets[1].identity_account_number,
+            Some(1),
+            "second slot should be account #1"
+        );
+        assert!(
+            nns_assets[0].principal.is_some(),
+            "default account should have a resolved principal"
+        );
+        assert!(
+            nns_assets[1].principal.is_some(),
+            "account #1 should have a resolved principal"
+        );
+        assert_ne!(
+            nns_assets[0].principal, nns_assets[1].principal,
+            "accounts should have different principals (different delegation keys were used)"
+        );
+    });
+}
+
+/// Полный fetch-цикл для идентити с двумя аккаунтами: default (None) + аккаунт #1 (Some(1)).
+/// Для каждого аккаунта используется пустой список нейронов (без цикла NNS) и AccountNotFound.
+/// Заканчивается на CheckAssets::FinishCheckAssets, аналогично ht_fetch_assets.
+pub(crate) async fn ht_fetch_assets_multiple_accounts() {
+    // StartFetchAssets → GetIdentityAccounts
+    crate::handlers::holder::processor::process_holder_with_lock().await;
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::FetchAssets {
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::GetIdentityAccounts,
+            },
+            ..
+        }
+    });
+
+    // GetIdentityAccounts: возвращаем 2 аккаунта — default (None) + account #1 (Some(1))
+    set_test_ic_agent_response({
+        let m: Result<GetAccountsResponse, GetAccountsError> = Ok(GetAccountsResponse {
+            accounts: vec![
+                AccountInfo {
+                    account_number: None,
+                    origin: "nns.ic0.app".to_string(),
+                    last_used: None,
+                    name: None,
+                },
+                AccountInfo {
+                    account_number: Some(1),
+                    origin: "nns.ic0.app".to_string(),
+                    last_used: None,
+                    name: None,
+                },
+            ],
+            default_account: 0,
+        });
+        Encode!(&m).unwrap()
+    });
+    crate::handlers::holder::processor::process_holder_with_lock().await;
+    // После IdentityAccountsGot — переходим к NeedPrepareDelegation для первого аккаунта (None)
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::FetchAssets {
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                    identity_account_number: None,
+                    sub_state: FetchNnsAssetsState::ObtainDelegationState {
+                        sub_state: DelegationState::NeedPrepareDelegation {
+                            identity_account_number: None,
+                            ..
+                        },
+                        ..
+                    },
+                },
+            },
+            ..
+        }
+    });
+
+    // --- Fetch NNS assets для аккаунта None (delegation key = vec![1]) ---
+    ht_fetch_nns_for_account_no_neurons(vec![1u8]).await;
+
+    // После завершения аккаунта None — переходим к NeedPrepareDelegation для аккаунта Some(1)
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::FetchAssets {
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                    identity_account_number: Some(1),
+                    sub_state: FetchNnsAssetsState::ObtainDelegationState {
+                        sub_state: DelegationState::NeedPrepareDelegation {
+                            identity_account_number: Some(1),
+                            ..
+                        },
+                        ..
+                    },
+                },
+            },
+            ..
+        }
+    });
+
+    // --- Fetch NNS assets для аккаунта Some(1) (delegation key = vec![2]) ---
+    ht_fetch_nns_for_account_no_neurons(vec![2u8]).await;
+
+    // После завершения всех аккаунтов — переходим в FinishFetchAssets
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::FetchAssets {
+            fetch_assets_state: FetchAssetsState::FinishFetchAssets,
+            ..
+        }
+    });
+
+    // FinishFetchAssets → CheckAssets::StartCheckAssets
+    crate::handlers::holder::processor::process_holder_with_lock().await;
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::CheckAssets {
+            sub_state: CheckAssetsState::StartCheckAssets,
+            ..
+        }
+    });
+
+    // CheckAssetsStarted → CheckAccountsForNoApprovePrepare
+    crate::handlers::holder::processor::process_holder_with_lock().await;
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::CheckAssets {
+            sub_state: CheckAssetsState::CheckAccountsForNoApprovePrepare,
+            ..
+        }
+    });
+
+    // Итерации проверки sub-аккаунтов.
+    // У нас 2 аккаунта с разными principals, но одинаковыми sub_account байтами
+    // ([0..0], [0..1]..[0..4]). retain() удаляет по sub_account байтам (игнорируя principal),
+    // поэтому каждый шаг удаляет 2 элемента (по одному на каждый principal).
+    // Итог: 5 unique sub_account значений → тот же цикл 0..=4, что и для 1 аккаунта.
+    for _i in 0..=4 {
+        crate::handlers::holder::processor::process_holder_with_lock().await;
+        test_state_matches!(HolderState::Holding {
+            sub_state: HoldingState::CheckAssets {
+                sub_state: CheckAssetsState::CheckAccountsForNoApproveSequential { .. },
+                ..
+            }
+        });
+    }
+
+    crate::handlers::holder::processor::process_holder_with_lock().await;
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::CheckAssets {
+            sub_state: CheckAssetsState::FinishCheckAssets,
+            ..
+        }
+    });
+}
+
+/// Вспомогательная функция: выполняет полный NNS-fetch для одного аккаунта,
+/// начиная с состояния NeedPrepareDelegation.
+/// Использует пустой список нейронов и AccountNotFound для упрощения.
+/// После завершения стейт переходит либо к NeedPrepareDelegation следующего аккаунта,
+/// либо к FinishFetchAssets (если аккаунты закончились) — проверяется вызывающей стороной.
+async fn ht_fetch_nns_for_account_no_neurons(delegation_public_key: Vec<u8>) {
+    // NeedPrepareDelegation → PrepareAccountDelegation response → GetDelegationWaiting
+    set_test_ic_agent_response({
+        let m: PrepareAccountDelegationRet = Ok(PrepareAccountDelegation {
+            user_key: delegation_public_key.clone().into(),
+            expiration: 234213412341234u64,
+        });
+        Encode!(&m).unwrap()
+    });
+    crate::handlers::holder::processor::process_holder_with_lock().await;
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::FetchAssets {
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                    sub_state: FetchNnsAssetsState::ObtainDelegationState {
+                        sub_state: DelegationState::GetDelegationWaiting { .. },
+                        ..
+                    },
+                    ..
+                },
+            },
+            ..
+        }
+    });
+
+    // Получаем делегацию через update_holder_with_lock
+    set_test_caller(ht_get_test_hub_canister());
+    assert!(update_holder_with_lock(HolderProcessingEvent::Holding {
+        event: HoldingProcessingEvent::FetchAssets {
+            event: FetchAssetsEvent::ObtainDelegation {
+                event: ObtainDelegationEvent::DelegationGot {
+                    delegation_data: DelegationData {
+                        hostname: "a.b.c".to_owned(),
+                        public_key: delegation_public_key.into(),
+                        timestamp: 234213412341234,
+                        signature: vec![].into(),
+                    },
+                },
+            },
+        },
+    })
+    .is_ok());
+
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::FetchAssets {
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                    sub_state: FetchNnsAssetsState::GetNeuronsIds,
+                    ..
+                },
+            },
+            ..
+        }
+    });
+
+    // GetNeuronsIds: пустой список → сразу переходим к GetAccountsInformation (минуя нейроны)
+    set_test_ic_agent_response(Encode!(&vec![] as &Vec<u64>).unwrap());
+    crate::handlers::holder::processor::process_holder_with_lock().await;
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::FetchAssets {
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                    sub_state: FetchNnsAssetsState::GetAccountsInformation,
+                    ..
+                },
+            },
+            ..
+        }
+    });
+
+    // GetAccountsInformation: AccountNotFound → GetAccountsBalances
+    set_test_ic_agent_response(Encode!(&GetAccountResponse::AccountNotFound).unwrap());
+    crate::handlers::holder::processor::process_holder_with_lock().await;
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::FetchAssets {
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                    sub_state: FetchNnsAssetsState::GetAccountsBalances,
+                    ..
+                },
+            },
+            ..
+        }
+    });
+
+    // GetAccountsBalances: аккаунтов нет → сразу AccountsBalancesObtained → FinishCurrentNnsAccountFetch
+    crate::handlers::holder::processor::process_holder_with_lock().await;
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::FetchAssets {
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::FinishCurrentNnsAccountFetch { .. },
+            },
+            ..
+        }
+    });
+
+    // NnsAssetsForAccountFetched → следующий аккаунт или FinishFetchAssets (проверяет вызывающая сторона)
+    crate::handlers::holder::processor::process_holder_with_lock().await;
 }
 
 #[tokio::test]
