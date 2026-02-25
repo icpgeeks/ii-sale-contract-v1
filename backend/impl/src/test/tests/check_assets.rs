@@ -21,6 +21,7 @@ use crate::{
             hold::drive_to_standard_hold,
         },
         ht_get_test_deployer, HT_CAPTURED_IDENTITY_NUMBER, HT_QUARANTINE_DURATION,
+        HT_STANDARD_CERT_EXPIRATION,
     },
     test_state_matches,
 };
@@ -105,7 +106,7 @@ async fn test_check_assets_happy_path() {
 async fn test_check_assets_have_approve() {
     // Reach StartFetchAssets
     drive_to_captured(
-        2 * 24 * 60 * 60 * 1000,
+        HT_STANDARD_CERT_EXPIRATION,
         ht_get_test_deployer(),
         HT_CAPTURED_IDENTITY_NUMBER,
     )

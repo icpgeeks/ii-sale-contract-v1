@@ -1,7 +1,7 @@
 use common_canister_impl::components::identity::api::{
     AuthnMethodConfirmationError, AuthnMethodRegistrationModeExitError,
 };
-use common_canister_types::{nanos_to_millis, LedgerAccount, Timestamped};
+use common_canister_types::Timestamped;
 use contract_canister_api::{
     confirm_owner_authn_method_registration::{
         ConfirmOwnerAuthnMethodRegistrationArgs, ConfirmOwnerAuthnMethodRegistrationError,
@@ -29,6 +29,7 @@ use crate::{
             hold::drive_after_quarantine,
         },
         ht_get_test_deployer, ht_get_test_hub_canister,
+        sale::ht_set_sale_intentions,
         support::mocks::{
             mock_authn_method_confirm_err, mock_authn_method_confirm_ok,
             mock_authn_method_registration_mode_enter_ok,
@@ -36,33 +37,33 @@ use crate::{
             mock_authn_method_registration_mode_exit_ret_ok, mock_authn_method_remove_err,
             mock_authn_method_remove_ok,
         },
-        HT_CAPTURED_IDENTITY_NUMBER, HT_QUARANTINE_DURATION, HT_SALE_DEAL_SAFE_CLOSE_DURATION,
-        HT_STANDARD_CERT_EXPIRATION, TEST_RELEASE_EXPIRATION_NANOS, TEST_RELEASE_REGISTRATION_ID,
+        tick_n, HT_CAPTURED_IDENTITY_NUMBER, HT_QUARANTINE_DURATION,
+        HT_SALE_DEAL_SAFE_CLOSE_DURATION, HT_STANDARD_CERT_EXPIRATION,
+        TEST_RELEASE_EXPIRATION_MILLIS, TEST_RELEASE_EXPIRATION_NANOS,
+        TEST_RELEASE_REGISTRATION_ID, TEST_RELEASING_IDENTITY_NUMBER,
     },
     test_state_matches,
     updates::holder::{
         confirm_owner_authn_method_registration::confirm_owner_authn_method_registration_int,
         delete_holder_authn_method::delete_holder_authn_method_int,
         restart_release_identity::restart_release_identity_int,
-        set_sale_intention::set_sale_intention_int,
         start_release_identity::start_release_identity_int,
     },
 };
 
 #[tokio::test]
 async fn test_releasing_happy_path() {
-    let test_identity_number = 778;
     drive_to_hold(
         HT_STANDARD_CERT_EXPIRATION,
         ht_get_test_deployer(),
-        test_identity_number,
+        TEST_RELEASING_IDENTITY_NUMBER,
         &FetchConfig::single_no_neurons(),
     )
     .await;
 
     // call owner
     set_test_caller(ht_get_test_deployer());
-    happy_path_release(test_identity_number, None).await;
+    happy_path_release(TEST_RELEASING_IDENTITY_NUMBER, None).await;
 }
 
 async fn happy_path_release(
@@ -93,9 +94,7 @@ async fn happy_path_release(
         ..
     });
 
-    let expiration_provided = TEST_RELEASE_EXPIRATION_NANOS;
-    let expiration_provided_millis = nanos_to_millis(&(expiration_provided as u128));
-    mock_authn_method_registration_mode_enter_ok(expiration_provided);
+    mock_authn_method_registration_mode_enter_ok(TEST_RELEASE_EXPIRATION_NANOS);
     super::tick().await;
     get_holder_model(|_, model| match &model.state.value {
         HolderState::Release {
@@ -107,7 +106,7 @@ async fn happy_path_release(
                 },
             ..
         } => {
-            assert_eq!(*expiration, expiration_provided_millis);
+            assert_eq!(*expiration, TEST_RELEASE_EXPIRATION_MILLIS);
             assert_eq!(registration_id, TEST_RELEASE_REGISTRATION_ID);
         }
         _ => panic!(
@@ -171,27 +170,72 @@ async fn happy_path_release(
     } if unsellable_reason == &unsellable_reason_opt);
 }
 
-#[tokio::test]
-async fn test_releasing() {
-    let test_identity_number = 777;
+// ---------------------------------------------------------------------------
+// Shared helper for releasing tests
+// ---------------------------------------------------------------------------
+
+/// Drives the state machine from fresh init all the way to
+/// `ReleaseState::WaitingAuthnMethodRegistration { confirm_error: None }`.
+///
+/// Steps:
+/// 1. `drive_to_hold` with `HT_STANDARD_CERT_EXPIRATION` and `identity_number`
+/// 2. `set_test_caller(deployer)` + `start_release_identity_int()`
+/// 3. tick: `StartRelease` → `EnterAuthnMethodRegistrationMode`
+/// 4. `mock_authn_method_registration_mode_enter_ok(TEST_RELEASE_EXPIRATION_NANOS)` + tick
+///    → `WaitingAuthnMethodRegistration { confirm_error: None }`
+///
+/// **Postcondition:** state is `WaitingAuthnMethodRegistration`.
+async fn drive_to_waiting_authn_registration(identity_number: u64) {
     drive_to_hold(
         HT_STANDARD_CERT_EXPIRATION,
         ht_get_test_deployer(),
-        test_identity_number,
+        identity_number,
+        &FetchConfig::single_no_neurons(),
+    )
+    .await;
+    set_test_caller(ht_get_test_deployer());
+    start_release_identity_int()
+        .await
+        .expect("drive_to_waiting_authn_registration: start_release_identity_int failed");
+    // StartRelease → EnterAuthnMethodRegistrationMode
+    super::tick().await;
+    mock_authn_method_registration_mode_enter_ok(TEST_RELEASE_EXPIRATION_NANOS);
+    // EnterAuthnMethodRegistrationMode → WaitingAuthnMethodRegistration
+    super::tick().await;
+}
+
+// ---------------------------------------------------------------------------
+// test_releasing_permission_denied_and_expiration
+// ---------------------------------------------------------------------------
+
+/// Tests:
+/// - `start_release_identity_int` from wrong caller → `PermissionDenied`
+/// - Registration mode entered → expires → `ReleaseFailed::AuthnMethodRegistrationExpired`
+/// - `restart_release_identity_int` from wrong caller → `PermissionDenied`
+/// - `restart_release_identity_int` from correct caller → back to `EnterAuthnMethodRegistrationMode`
+#[tokio::test]
+async fn test_releasing_permission_denied_and_expiration() {
+    drive_to_hold(
+        HT_STANDARD_CERT_EXPIRATION,
+        ht_get_test_deployer(),
+        TEST_RELEASING_IDENTITY_NUMBER,
         &FetchConfig::single_no_neurons(),
     )
     .await;
 
-    // call wrong owner
+    // Wrong caller → PermissionDenied
     set_test_caller(ht_get_test_hub_canister());
     let result = start_release_identity_int().await;
     result_err_matches!(result, StartReleaseIdentityError::PermissionDenied);
 
-    // call owner
+    // Correct caller → StartRelease
     set_test_caller(ht_get_test_deployer());
     let result = start_release_identity_int().await;
     let holder_information = result_ok_with_holder_information!(result);
-    assert_eq!(holder_information.identity_number, Some(777));
+    assert_eq!(
+        holder_information.identity_number,
+        Some(TEST_RELEASING_IDENTITY_NUMBER)
+    );
     assert_eq!(
         holder_information.state,
         HolderState::Release {
@@ -202,6 +246,7 @@ async fn test_releasing() {
         }
     );
 
+    // StartRelease → EnterAuthnMethodRegistrationMode
     super::tick().await;
     test_state_matches!(HolderState::Release {
         sub_state: ReleaseState::EnterAuthnMethodRegistrationMode {
@@ -210,9 +255,8 @@ async fn test_releasing() {
         ..
     });
 
-    let expiration_provided = TEST_RELEASE_EXPIRATION_NANOS;
-    let expiration_provided_millis = nanos_to_millis(&(expiration_provided as u128));
-    mock_authn_method_registration_mode_enter_ok(expiration_provided);
+    // EnterAuthnMethodRegistrationMode → WaitingAuthnMethodRegistration
+    mock_authn_method_registration_mode_enter_ok(TEST_RELEASE_EXPIRATION_NANOS);
     super::tick().await;
     get_holder_model(|_, model| match &model.state.value {
         HolderState::Release {
@@ -224,16 +268,17 @@ async fn test_releasing() {
                 },
             ..
         } => {
-            assert_eq!(*expiration, expiration_provided_millis);
+            assert_eq!(*expiration, TEST_RELEASE_EXPIRATION_MILLIS);
             assert_eq!(registration_id, TEST_RELEASE_REGISTRATION_ID);
         }
         _ => panic!(
-            "Expected WaitingAuthnMethodRegistration state, {:?}",
+            "Expected WaitingAuthnMethodRegistration, got: {:?}",
             model.state.value
         ),
     });
-    // emulate expiration
-    set_test_time(expiration_provided_millis + 1);
+
+    // Advance time past expiration → ReleaseFailed::AuthnMethodRegistrationExpired
+    set_test_time(TEST_RELEASE_EXPIRATION_MILLIS + 1);
     super::tick().await;
     test_state_matches!(HolderState::Release {
         sub_state: ReleaseState::ReleaseFailed {
@@ -242,208 +287,310 @@ async fn test_releasing() {
         ..
     });
 
-    // restart release
-    // call wrong owner
+    // Restart: wrong caller → PermissionDenied
     set_test_caller(ht_get_test_hub_canister());
     let result = restart_release_identity_int(None).await;
     result_err_matches!(result, RestartReleaseIdentityError::PermissionDenied);
 
+    // Restart: correct caller → back to EnterAuthnMethodRegistrationMode
     set_test_caller(ht_get_test_deployer());
     let result = restart_release_identity_int(None).await;
     let holder_information = result_ok_with_holder_information!(result);
     assert_eq!(
         holder_information.identity_number,
-        Some(test_identity_number)
+        Some(TEST_RELEASING_IDENTITY_NUMBER)
     );
-    let mut pass = 1;
-    loop {
-        test_state_matches!(HolderState::Release {
-            sub_state: ReleaseState::EnterAuthnMethodRegistrationMode {
-                registration_id: None
-            },
-            ..
-        });
-        mock_authn_method_registration_mode_enter_ok(expiration_provided);
-        super::tick().await;
-        get_holder_model(|_, model| match &model.state.value {
-            HolderState::Release {
-                sub_state:
-                    ReleaseState::WaitingAuthnMethodRegistration {
-                        expiration,
-                        registration_id,
-                        confirm_error: None,
-                    },
-                ..
-            } => {
-                assert_eq!(*expiration, expiration_provided_millis);
-                assert_eq!(registration_id, TEST_RELEASE_REGISTRATION_ID);
-            }
-            _ => panic!(
-                "Expected WaitingAuthnMethodRegistration state, {:?}",
-                model.state.value
-            ),
-        });
+    test_state_matches!(HolderState::Release {
+        sub_state: ReleaseState::EnterAuthnMethodRegistrationMode {
+            registration_id: None
+        },
+        ..
+    });
+}
 
-        // check code
-        let code = "1234".to_string();
-        let confirm_args = ConfirmOwnerAuthnMethodRegistrationArgs {
-            verification_code: code.clone(),
-        };
-        // call wrong owner
-        set_test_caller(ht_get_test_hub_canister());
-        let result = confirm_owner_authn_method_registration_int(confirm_args.clone()).await;
-        result_err_matches!(
-            result,
-            ConfirmOwnerAuthnMethodRegistrationError::PermissionDenied
-        );
+// ---------------------------------------------------------------------------
+// test_releasing_premature_restart_during_waiting
+// ---------------------------------------------------------------------------
 
-        set_test_caller(ht_get_test_deployer());
-        let result = confirm_owner_authn_method_registration_int(confirm_args).await;
-        let holder_information = result_ok_with_holder_information!(result);
-        assert_eq!(
-            holder_information.identity_number,
-            Some(test_identity_number)
-        );
-        get_holder_model(|_, model| match &model.state.value {
-            HolderState::Release {
-                sub_state:
-                    ReleaseState::ConfirmAuthnMethodRegistration {
-                        verification_code, ..
-                    },
-                ..
-            } => assert_eq!(verification_code, &code),
-            _ => panic!(
-                "Expected ConfirmAuthnMethodRegistration state, {:?}",
-                model.state.value
-            ),
-        });
+/// Tests restarting the release flow while still in `WaitingAuthnMethodRegistration`
+/// (with a `confirm_error` present after a wrong-code attempt).
+///
+/// The premature restart transitions to `EnsureOrphanedRegistrationExited`, and after
+/// a successful exit response the state returns to `EnterAuthnMethodRegistrationMode`.
+#[tokio::test]
+async fn test_releasing_premature_restart_during_waiting() {
+    drive_to_waiting_authn_registration(TEST_RELEASING_IDENTITY_NUMBER).await;
 
-        mock_authn_method_confirm_err(AuthnMethodConfirmationError::WrongCode { retries_left: 3 });
-        super::tick().await;
-        test_state_matches!(HolderState::Release {
-            sub_state: ReleaseState::WaitingAuthnMethodRegistration {
-                confirm_error: Some(ConfirmAuthnMethodRegistrationError { .. }),
-                ..
-            },
-            ..
-        });
+    // Confirm with wrong code → ConfirmAuthnMethodRegistration
+    let wrong_code = "1234".to_string();
 
-        if pass == 1 {
-            // restart prematurely
-            let result = restart_release_identity_int(None).await;
-            let holder_information = result_ok_with_holder_information!(result);
-            assert_eq!(
-                holder_information.identity_number,
-                Some(test_identity_number)
-            );
-            test_state_matches!(HolderState::Release {
-                sub_state: ReleaseState::EnsureOrphanedRegistrationExited {
-                    registration_id: None
+    // Wrong caller for confirm
+    set_test_caller(ht_get_test_hub_canister());
+    let result =
+        confirm_owner_authn_method_registration_int(ConfirmOwnerAuthnMethodRegistrationArgs {
+            verification_code: wrong_code.clone(),
+        })
+        .await;
+    result_err_matches!(
+        result,
+        ConfirmOwnerAuthnMethodRegistrationError::PermissionDenied
+    );
+
+    // Correct caller
+    set_test_caller(ht_get_test_deployer());
+    let result =
+        confirm_owner_authn_method_registration_int(ConfirmOwnerAuthnMethodRegistrationArgs {
+            verification_code: wrong_code.clone(),
+        })
+        .await;
+    let holder_information = result_ok_with_holder_information!(result);
+    assert_eq!(
+        holder_information.identity_number,
+        Some(TEST_RELEASING_IDENTITY_NUMBER)
+    );
+    get_holder_model(|_, model| match &model.state.value {
+        HolderState::Release {
+            sub_state:
+                ReleaseState::ConfirmAuthnMethodRegistration {
+                    verification_code, ..
                 },
-                ..
-            });
-
-            mock_authn_method_registration_mode_exit_ret_ok();
-            super::tick().await;
-            pass += 1;
-            continue;
-        }
-
-        // check code
-        let code = "1248".to_string();
-        let result =
-            confirm_owner_authn_method_registration_int(ConfirmOwnerAuthnMethodRegistrationArgs {
-                verification_code: code.clone(),
-            })
-            .await;
-        let holder_information = result_ok_with_holder_information!(result);
-        assert_eq!(
-            holder_information.identity_number,
-            Some(test_identity_number)
-        );
-        get_holder_model(|_, model| match &model.state.value {
-            HolderState::Release {
-                sub_state:
-                    ReleaseState::ConfirmAuthnMethodRegistration {
-                        verification_code, ..
-                    },
-                ..
-            } => assert_eq!(verification_code, &code),
-            _ => panic!(
-                "Expected ConfirmAuthnMethodRegistration state, {:?}",
-                model.state.value
-            ),
-        });
-
-        mock_authn_method_confirm_ok();
-        super::tick().await;
-        test_state_matches!(HolderState::Release {
-            sub_state: ReleaseState::CheckingAccessFromOwnerAuthnMethod,
             ..
-        });
+        } => assert_eq!(verification_code, &wrong_code),
+        _ => panic!(
+            "Expected ConfirmAuthnMethodRegistration, got: {:?}",
+            model.state.value
+        ),
+    });
 
-        let result = delete_holder_authn_method_int().await;
-        let holder_information = result_ok_with_holder_information!(result);
-        assert_eq!(
-            holder_information.identity_number,
-            Some(test_identity_number)
-        );
-        test_state_matches!(HolderState::Release {
-            sub_state: ReleaseState::DeleteHolderAuthnMethod,
+    // WrongCode response → back to WaitingAuthnMethodRegistration with confirm_error
+    mock_authn_method_confirm_err(AuthnMethodConfirmationError::WrongCode { retries_left: 3 });
+    super::tick().await;
+    test_state_matches!(HolderState::Release {
+        sub_state: ReleaseState::WaitingAuthnMethodRegistration {
+            confirm_error: Some(ConfirmAuthnMethodRegistrationError { .. }),
             ..
-        });
+        },
+        ..
+    });
 
-        if pass == 3 {
-            // add ecsda key
-            get_holder_model(|_, model| {
-                set_test_additional_auth(model.get_ecdsa_as_uncompressed_public_key());
-            });
-            mock_authn_method_remove_err();
-        }
-        super::tick().await;
-        if pass == 2 {
-            test_state_matches!(HolderState::Release {
-                sub_state: ReleaseState::ReleaseFailed {
-                    error: ReleaseError::HolderAuthnMethodDeleteStopOwnerAuthnMethodNotRegistered
+    // Premature restart: wrong caller → PermissionDenied
+    set_test_caller(ht_get_test_hub_canister());
+    let result = restart_release_identity_int(None).await;
+    result_err_matches!(result, RestartReleaseIdentityError::PermissionDenied);
+
+    // Premature restart: correct caller → EnsureOrphanedRegistrationExited
+    set_test_caller(ht_get_test_deployer());
+    let result = restart_release_identity_int(None).await;
+    let holder_information = result_ok_with_holder_information!(result);
+    assert_eq!(
+        holder_information.identity_number,
+        Some(TEST_RELEASING_IDENTITY_NUMBER)
+    );
+    test_state_matches!(HolderState::Release {
+        sub_state: ReleaseState::EnsureOrphanedRegistrationExited {
+            registration_id: None
+        },
+        ..
+    });
+
+    // Exit succeeds → EnterAuthnMethodRegistrationMode
+    mock_authn_method_registration_mode_exit_ret_ok();
+    super::tick().await;
+    test_state_matches!(HolderState::Release {
+        sub_state: ReleaseState::EnterAuthnMethodRegistrationMode {
+            registration_id: None
+        },
+        ..
+    });
+}
+
+// ---------------------------------------------------------------------------
+// test_releasing_delete_fails_no_ecdsa_and_restart
+// ---------------------------------------------------------------------------
+
+/// Tests the path where `DeleteHolderAuthnMethod` fails because the owner authn
+/// method is not registered (no ECDSA key added before the tick).
+///
+/// After the failure:
+/// - restart → `EnsureOrphanedRegistrationExited`
+/// - exit with `InternalCanisterError` → back to `EnterAuthnMethodRegistrationMode`
+#[tokio::test]
+async fn test_releasing_delete_fails_no_ecdsa_and_restart() {
+    drive_to_waiting_authn_registration(TEST_RELEASING_IDENTITY_NUMBER).await;
+
+    // Wrong code confirm → WaitingAuthnMethodRegistration with error
+    let wrong_code = "1234".to_string();
+    set_test_caller(ht_get_test_deployer());
+    confirm_owner_authn_method_registration_int(ConfirmOwnerAuthnMethodRegistrationArgs {
+        verification_code: wrong_code,
+    })
+    .await
+    .expect("confirm (wrong code) failed");
+    mock_authn_method_confirm_err(AuthnMethodConfirmationError::WrongCode { retries_left: 3 });
+    super::tick().await;
+    test_state_matches!(HolderState::Release {
+        sub_state: ReleaseState::WaitingAuthnMethodRegistration {
+            confirm_error: Some(ConfirmAuthnMethodRegistrationError { .. }),
+            ..
+        },
+        ..
+    });
+
+    // Correct code confirm → ConfirmAuthnMethodRegistration → CheckingAccessFromOwnerAuthnMethod
+    let correct_code = "1248".to_string();
+    let result =
+        confirm_owner_authn_method_registration_int(ConfirmOwnerAuthnMethodRegistrationArgs {
+            verification_code: correct_code.clone(),
+        })
+        .await;
+    let holder_information = result_ok_with_holder_information!(result);
+    assert_eq!(
+        holder_information.identity_number,
+        Some(TEST_RELEASING_IDENTITY_NUMBER)
+    );
+    get_holder_model(|_, model| match &model.state.value {
+        HolderState::Release {
+            sub_state:
+                ReleaseState::ConfirmAuthnMethodRegistration {
+                    verification_code, ..
                 },
-                ..
-            });
+            ..
+        } => assert_eq!(verification_code, &correct_code),
+        _ => panic!(
+            "Expected ConfirmAuthnMethodRegistration, got: {:?}",
+            model.state.value
+        ),
+    });
 
-            let result = restart_release_identity_int(None).await;
-            assert!(result.is_ok());
+    mock_authn_method_confirm_ok();
+    super::tick().await;
+    test_state_matches!(HolderState::Release {
+        sub_state: ReleaseState::CheckingAccessFromOwnerAuthnMethod,
+        ..
+    });
 
-            test_state_matches!(HolderState::Release {
-                sub_state: ReleaseState::EnsureOrphanedRegistrationExited {
-                    registration_id: None
-                },
-                ..
-            });
+    // Delete holder authn method → DeleteHolderAuthnMethod
+    let result = delete_holder_authn_method_int().await;
+    let holder_information = result_ok_with_holder_information!(result);
+    assert_eq!(
+        holder_information.identity_number,
+        Some(TEST_RELEASING_IDENTITY_NUMBER)
+    );
+    test_state_matches!(HolderState::Release {
+        sub_state: ReleaseState::DeleteHolderAuthnMethod,
+        ..
+    });
 
-            mock_authn_method_registration_mode_exit_ret_err(
-                AuthnMethodRegistrationModeExitError::InternalCanisterError("ss".to_owned()),
-            );
+    // Tick WITHOUT adding ECDSA key → owner authn method not registered
+    // → ReleaseFailed::HolderAuthnMethodDeleteStopOwnerAuthnMethodNotRegistered
+    super::tick().await;
+    test_state_matches!(HolderState::Release {
+        sub_state: ReleaseState::ReleaseFailed {
+            error: ReleaseError::HolderAuthnMethodDeleteStopOwnerAuthnMethodNotRegistered
+        },
+        ..
+    });
 
-            super::tick().await;
+    // Restart from ReleaseFailed → EnsureOrphanedRegistrationExited
+    let result = restart_release_identity_int(None).await;
+    assert!(result.is_ok());
+    test_state_matches!(HolderState::Release {
+        sub_state: ReleaseState::EnsureOrphanedRegistrationExited {
+            registration_id: None
+        },
+        ..
+    });
 
-            test_state_matches!(HolderState::Release {
-                sub_state: ReleaseState::EnterAuthnMethodRegistrationMode {
-                    registration_id: None
-                },
-                ..
-            });
-            pass += 1;
-            continue;
-        } else {
-            test_state_matches!(HolderState::Release {
-                sub_state: ReleaseState::DeleteHolderAuthnMethod,
-                ..
-            });
-            processing_err_matches!(HolderProcessingError::InternalError { .. });
-        }
-        break;
-    }
+    // Exit fails with InternalCanisterError → back to EnterAuthnMethodRegistrationMode
+    mock_authn_method_registration_mode_exit_ret_err(
+        AuthnMethodRegistrationModeExitError::InternalCanisterError("ss".to_owned()),
+    );
+    super::tick().await;
+    test_state_matches!(HolderState::Release {
+        sub_state: ReleaseState::EnterAuthnMethodRegistrationMode {
+            registration_id: None
+        },
+        ..
+    });
+}
 
-    // add ecsda key
+// ---------------------------------------------------------------------------
+// test_releasing_remove_fails_with_processing_error_then_recovery
+// ---------------------------------------------------------------------------
+
+/// Tests the path where `authn_method_remove` returns an error after the ECDSA
+/// key has been added, producing a `HolderProcessingError::InternalError`.
+///
+/// After the processing error the state remains in `DeleteHolderAuthnMethod`.
+/// A subsequent tick with `mock_authn_method_remove_ok` completes the release → `Closed`.
+#[tokio::test]
+async fn test_releasing_remove_fails_with_processing_error_then_recovery() {
+    drive_to_waiting_authn_registration(TEST_RELEASING_IDENTITY_NUMBER).await;
+
+    // Wrong code confirm first
+    let wrong_code = "1234".to_string();
+    set_test_caller(ht_get_test_deployer());
+    confirm_owner_authn_method_registration_int(ConfirmOwnerAuthnMethodRegistrationArgs {
+        verification_code: wrong_code,
+    })
+    .await
+    .expect("confirm (wrong code) failed");
+    mock_authn_method_confirm_err(AuthnMethodConfirmationError::WrongCode { retries_left: 3 });
+    super::tick().await;
+    test_state_matches!(HolderState::Release {
+        sub_state: ReleaseState::WaitingAuthnMethodRegistration {
+            confirm_error: Some(ConfirmAuthnMethodRegistrationError { .. }),
+            ..
+        },
+        ..
+    });
+
+    // Correct code confirm → through to DeleteHolderAuthnMethod
+    let correct_code = "1248".to_string();
+    let result =
+        confirm_owner_authn_method_registration_int(ConfirmOwnerAuthnMethodRegistrationArgs {
+            verification_code: correct_code.clone(),
+        })
+        .await;
+    let holder_information = result_ok_with_holder_information!(result);
+    assert_eq!(
+        holder_information.identity_number,
+        Some(TEST_RELEASING_IDENTITY_NUMBER)
+    );
+
+    mock_authn_method_confirm_ok();
+    super::tick().await; // → CheckingAccessFromOwnerAuthnMethod
+    test_state_matches!(HolderState::Release {
+        sub_state: ReleaseState::CheckingAccessFromOwnerAuthnMethod,
+        ..
+    });
+
+    let result = delete_holder_authn_method_int().await;
+    let holder_information = result_ok_with_holder_information!(result);
+    assert_eq!(
+        holder_information.identity_number,
+        Some(TEST_RELEASING_IDENTITY_NUMBER)
+    );
+    test_state_matches!(HolderState::Release {
+        sub_state: ReleaseState::DeleteHolderAuthnMethod,
+        ..
+    });
+
+    // Add ECDSA key but mock remove failure → InternalError processing error
+    get_holder_model(|_, model| {
+        set_test_additional_auth(model.get_ecdsa_as_uncompressed_public_key());
+    });
+    mock_authn_method_remove_err();
+    super::tick().await;
+    // State stays at DeleteHolderAuthnMethod, with a processing error attached
+    test_state_matches!(HolderState::Release {
+        sub_state: ReleaseState::DeleteHolderAuthnMethod,
+        ..
+    });
+    processing_err_matches!(HolderProcessingError::InternalError { .. });
+
+    // Recovery: re-add ECDSA key (set_test_additional_auth is consumed per tick)
+    // and retry with remove_ok → Closed
     get_holder_model(|_, model| {
         set_test_additional_auth(model.get_ecdsa_as_uncompressed_public_key());
     });
@@ -456,11 +603,10 @@ async fn test_releasing() {
 
 #[tokio::test]
 async fn test_releasing_after_quarantine() {
-    let test_identity_number = 779;
     drive_to_hold(
         HT_STANDARD_CERT_EXPIRATION,
         ht_get_test_deployer(),
-        test_identity_number,
+        TEST_RELEASING_IDENTITY_NUMBER,
         &FetchConfig::single_no_neurons(),
     )
     .await;
@@ -475,16 +621,15 @@ async fn test_releasing_after_quarantine() {
     });
 
     set_test_caller(ht_get_test_deployer());
-    happy_path_release(test_identity_number, None).await;
+    happy_path_release(TEST_RELEASING_IDENTITY_NUMBER, None).await;
 }
 
 #[tokio::test]
 async fn test_releasing_in_unsellable_mode() {
-    let test_identity_number = 779;
     drive_to_hold(
         HT_STANDARD_CERT_EXPIRATION,
         ht_get_test_deployer(),
-        test_identity_number,
+        TEST_RELEASING_IDENTITY_NUMBER,
         &FetchConfig::single_no_neurons(),
     )
     .await;
@@ -509,7 +654,7 @@ async fn test_releasing_in_unsellable_mode() {
 
     set_test_caller(ht_get_test_deployer());
     happy_path_release(
-        test_identity_number,
+        TEST_RELEASING_IDENTITY_NUMBER,
         Some(UnsellableReason::CertificateExpired),
     )
     .await;
@@ -517,22 +662,16 @@ async fn test_releasing_in_unsellable_mode() {
 
 #[tokio::test]
 async fn test_releasing_in_sale_without_sale_offer() {
-    let test_identity_number = 779;
     drive_to_hold(
         HT_STANDARD_CERT_EXPIRATION,
         ht_get_test_deployer(),
-        test_identity_number,
+        TEST_RELEASING_IDENTITY_NUMBER,
         &FetchConfig::single_no_neurons(),
     )
     .await;
 
-    // call prepare sale
-    set_test_caller(ht_get_test_deployer());
-    let _ = set_sale_intention_int(LedgerAccount::Account {
-        owner: ht_get_test_deployer(),
-        subaccount: None,
-    })
-    .await;
+    // Set sale intention (transitions to WaitingSellOffer)
+    ht_set_sale_intentions(ht_get_test_deployer()).await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::Hold {
             quarantine: Some(HT_QUARANTINE_DURATION),
@@ -540,46 +679,21 @@ async fn test_releasing_in_sale_without_sale_offer() {
         }
     });
 
-    happy_path_release(test_identity_number, None).await;
+    happy_path_release(TEST_RELEASING_IDENTITY_NUMBER, None).await;
 }
 
 #[tokio::test]
 async fn test_releasing_with_failed_confirmation() {
-    let test_identity_number = 780;
-    drive_to_hold(
-        HT_STANDARD_CERT_EXPIRATION,
-        ht_get_test_deployer(),
-        test_identity_number,
-        &FetchConfig::single_no_neurons(),
-    )
-    .await;
+    drive_to_waiting_authn_registration(TEST_RELEASING_IDENTITY_NUMBER).await;
 
-    // call owner
-    set_test_caller(ht_get_test_deployer());
-    let result = start_release_identity_int().await;
-    let holder_information = result_ok_with_holder_information!(result);
-    assert_eq!(
-        holder_information.identity_number,
-        Some(test_identity_number)
-    );
+    // state is already WaitingAuthnMethodRegistration — verify it
     test_state_matches!(HolderState::Release {
-        release_initiation: ReleaseInitiation::Manual {
-            unsellable_reason: None
-        },
-        sub_state: ReleaseState::StartRelease,
-    });
-
-    super::tick().await;
-    test_state_matches!(HolderState::Release {
-        sub_state: ReleaseState::EnterAuthnMethodRegistrationMode {
-            registration_id: None
+        sub_state: ReleaseState::WaitingAuthnMethodRegistration {
+            confirm_error: None,
+            ..
         },
         ..
     });
-
-    let expiration_provided = TEST_RELEASE_EXPIRATION_NANOS;
-    mock_authn_method_registration_mode_enter_ok(expiration_provided);
-    super::tick().await;
 
     // Attempt with wrong code
     let wrong_code = "9999".to_string();
@@ -738,14 +852,12 @@ async fn test_release_when_validate_assets() {
         }
     });
 
-    super::tick().await;
-    super::tick().await;
-    super::tick().await;
-    super::tick().await;
-    super::tick().await;
-    super::tick().await;
-    super::tick().await;
-    super::tick().await;
+    // Advance through the check-assets sub-steps:
+    //   tick 1: StartCheckAssets → CheckAccountsForNoApprovePrepare
+    //   tick 2‥6: sequential sub-account checks (HT_SEQUENTIAL_CHECK_STEPS = 4 iterations + 1)
+    //   tick 7: FinishCheckAssets
+    //   tick 8: FinishCheckAssets → ValidateAssets
+    tick_n(8).await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::ValidateAssets { .. },
     });

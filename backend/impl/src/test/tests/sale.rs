@@ -28,7 +28,7 @@ use crate::{
     result_err_matches, result_ok_with_holder_information,
     test::tests::{
         components::{
-            ic::{ht_set_test_cycles, set_test_caller},
+            ic::set_test_caller,
             icrc2_ledger::ht_approve_account,
             ledger::{
                 ht_deposit_account, ht_get_account_balance, ht_withdraw_from_account, HT_LEDGER_FEE,
@@ -40,8 +40,9 @@ use crate::{
             fetch::FetchConfig,
             hold::{drive_after_quarantine, drive_to_standard_hold},
         },
-        ht_get_test_buyer, ht_get_test_contract_canister, ht_get_test_deployer,
-        ht_get_test_hub_canister, ht_get_test_other, HT_MIN_PRICE, HT_QUARANTINE_DURATION,
+        ht_get_critical_cycles_threshold, ht_get_test_buyer, ht_get_test_contract_canister,
+        ht_get_test_deployer, ht_get_test_hub_canister, ht_get_test_other,
+        ht_set_cycles_above_critical_threshold, HT_MIN_PRICE, HT_QUARANTINE_DURATION,
         HT_SALE_DEAL_SAFE_CLOSE_DURATION,
     },
     test_state_matches,
@@ -54,6 +55,27 @@ use crate::{
         start_release_identity::start_release_identity_int,
     },
 };
+
+// ---------------------------------------------------------------------------
+// Local helpers
+// ---------------------------------------------------------------------------
+
+/// Funds the given approved account for a buyer offer in one step:
+/// sets the ICRC-2 allowance and deposits the ICP balance.
+///
+/// The allowance expiration is taken directly from the current sale deal's
+/// `expiration_time` — meaning this helper is only valid after a sale deal
+/// has been created (i.e. after `ht_set_sale_intentions`).
+///
+/// For scenarios that intentionally use *different* amounts for the allowance
+/// vs the deposit (e.g. `test_set_buyer_offer_low_allowance`), call
+/// `ht_approve_account` + `ht_deposit_account` manually.
+fn ht_fund_approved_account(approved_account: &LedgerAccount, amount: TokenE8s) {
+    let identifier = to_account_identifier(approved_account).unwrap();
+    let expires_at = get_holder_model(|_, model| model.sale_deal.as_ref().unwrap().expiration_time);
+    ht_approve_account(identifier.to_hex(), expires_at, amount);
+    ht_deposit_account(&identifier, amount);
+}
 
 #[tokio::test]
 async fn test_sale_quarantine() {
@@ -442,15 +464,7 @@ async fn test_set_buyer_offer_invalid_approved_account() {
 
     set_test_caller(buyer);
 
-    let threshold = get_holder_model(|state, model| {
-        model.initial_cycles
-            * (state
-                .get_env()
-                .get_settings()
-                .critical_cycles_threshold_percentage as u128)
-            / 100
-    });
-    ht_set_test_cycles(threshold + 1);
+    ht_set_cycles_above_critical_threshold();
 
     let approved_account = LedgerAccount::Account {
         owner: buyer,
@@ -578,11 +592,7 @@ async fn test_set_buyer_offer_impossible_for_owner() {
     let referral = None;
     let price = HT_MIN_PRICE;
 
-    let approved_account_identifier = to_account_identifier(&approved_account).unwrap();
-    let approved_account_hex = approved_account_identifier.to_hex();
-    let expires_at = get_holder_model(|_, model| model.sale_deal.as_ref().unwrap().expiration_time);
-    ht_approve_account(approved_account_hex.clone(), expires_at, price);
-    ht_deposit_account(&approved_account_identifier, price);
+    ht_fund_approved_account(&approved_account, price);
 
     let result = set_buyer_offer_int(approved_account, referral, price).await;
     result_err_matches!(result, SetBuyerOfferError::HolderWrongState);
@@ -604,11 +614,7 @@ async fn test_set_buyer_offer_impossible_while_quarantine() {
     let referral = None;
     let price = HT_MIN_PRICE;
 
-    let approved_account_identifier = to_account_identifier(&approved_account).unwrap();
-    let approved_account_hex = approved_account_identifier.to_hex();
-    let expires_at = get_holder_model(|_, model| model.sale_deal.as_ref().unwrap().expiration_time);
-    ht_approve_account(approved_account_hex.clone(), expires_at, price);
-    ht_deposit_account(&approved_account_identifier, price);
+    ht_fund_approved_account(&approved_account, price);
 
     let result = set_buyer_offer_int(approved_account, referral, price).await;
     result_err_matches!(result, SetBuyerOfferError::HolderWrongState);
@@ -628,11 +634,7 @@ async fn test_set_buyer_offer_sellable_expired() {
     let referral = None;
     let price = HT_MIN_PRICE;
 
-    let approved_account_identifier = to_account_identifier(&approved_account).unwrap();
-    let approved_account_hex = approved_account_identifier.to_hex();
-    let expires_at = get_holder_model(|_, model| model.sale_deal.as_ref().unwrap().expiration_time);
-    ht_approve_account(approved_account_hex.clone(), expires_at, price);
-    ht_deposit_account(&approved_account_identifier, price);
+    ht_fund_approved_account(&approved_account, price);
 
     let result = set_buyer_offer_int(approved_account, referral, price).await;
     result_err_matches!(result, SetBuyerOfferError::HolderWrongState);
@@ -656,26 +658,14 @@ async fn test_set_buyer_offer_not_sell_offer() {
     });
 
     set_test_caller(buyer);
-    let threshold = get_holder_model(|state, model| {
-        model.initial_cycles
-            * (state
-                .get_env()
-                .get_settings()
-                .critical_cycles_threshold_percentage as u128)
-            / 100
-    });
-    ht_set_test_cycles(threshold + 1);
+    ht_set_cycles_above_critical_threshold();
 
     let approved_account = ht_get_buyer_approved_account(&buyer);
     let max_referral_length = get_env().get_settings().max_referral_length;
     let referral = Some("_".repeat(max_referral_length).to_owned());
     let price = HT_MIN_PRICE;
 
-    let approved_account_identifier = to_account_identifier(&approved_account).unwrap();
-    let approved_account_hex = approved_account_identifier.to_hex();
-    let expires_at = get_holder_model(|_, model| model.sale_deal.as_ref().unwrap().expiration_time);
-    ht_approve_account(approved_account_hex.clone(), expires_at, price);
-    ht_deposit_account(&approved_account_identifier, price);
+    ht_fund_approved_account(&approved_account, price);
 
     let result = set_buyer_offer_int(approved_account, referral, price).await;
     result_err_matches!(result, SetBuyerOfferError::HolderWrongState);
@@ -689,26 +679,14 @@ async fn test_set_buyer_offer_success() {
     ht_drive_to_trading(owner, 2 * HT_MIN_PRICE).await;
 
     set_test_caller(buyer);
-    let threshold = get_holder_model(|state, model| {
-        model.initial_cycles
-            * (state
-                .get_env()
-                .get_settings()
-                .critical_cycles_threshold_percentage as u128)
-            / 100
-    });
-    ht_set_test_cycles(threshold + 1);
+    ht_set_cycles_above_critical_threshold();
 
     let approved_account = ht_get_buyer_approved_account(&buyer);
     let max_referral_length = get_env().get_settings().max_referral_length;
     let referral = Some("_".repeat(max_referral_length).to_owned());
     let price = HT_MIN_PRICE;
 
-    let approved_account_identifier = to_account_identifier(&approved_account).unwrap();
-    let approved_account_hex = approved_account_identifier.to_hex();
-    let expires_at = get_holder_model(|_, model| model.sale_deal.as_ref().unwrap().expiration_time);
-    ht_approve_account(approved_account_hex.clone(), expires_at, price);
-    ht_deposit_account(&approved_account_identifier, price);
+    ht_fund_approved_account(&approved_account, price);
 
     let result = set_buyer_offer_int(approved_account.clone(), referral.clone(), price).await;
     let holder_information = result_ok_with_holder_information!(result);
@@ -857,11 +835,7 @@ async fn test_set_seller_offer_fail_when_existing_buyer_offer() {
     let referral = Some("_".repeat(max_referral_length).to_owned());
     let price = 2 * HT_MIN_PRICE;
 
-    let approved_account_identifier = to_account_identifier(&approved_account).unwrap();
-    let approved_account_hex = approved_account_identifier.to_hex();
-    let expires_at = get_holder_model(|_, model| model.sale_deal.as_ref().unwrap().expiration_time);
-    ht_approve_account(approved_account_hex.clone(), expires_at, price);
-    ht_deposit_account(&approved_account_identifier, price);
+    ht_fund_approved_account(&approved_account, price);
 
     let result = set_buyer_offer_int(approved_account.clone(), referral.clone(), price).await;
     let holder_information = result_ok_with_holder_information!(result);
@@ -929,14 +903,8 @@ async fn test_accept_buyer_offer() {
     result_err_matches!(result, AcceptBuyerOfferError::OfferMismatch);
 
     // FAIL ACCEPT CRITICAL_CYCLES_LEVEL
-    let threshold = get_holder_model(|state, model| {
-        model.initial_cycles
-            * (state
-                .get_env()
-                .get_settings()
-                .critical_cycles_threshold_percentage as u128)
-            / 100
-    });
+    let threshold = ht_get_critical_cycles_threshold();
+    use crate::test::tests::components::ic::ht_set_test_cycles;
     ht_set_test_cycles(threshold);
     let result = accept_buyer_offer_int(AcceptBuyerOfferArgs {
         buyer,
@@ -952,7 +920,7 @@ async fn test_accept_buyer_offer() {
     );
 
     // ACCEPT BUYER OFFER SUCCESS
-    ht_set_test_cycles(threshold + 1);
+    ht_set_cycles_above_critical_threshold();
 
     let result = accept_buyer_offer_int(AcceptBuyerOfferArgs {
         buyer,
@@ -1009,15 +977,7 @@ async fn test_accept_failed_buyer_offer() {
         buyer_offer_amount
     );
 
-    let threshold = get_holder_model(|state, model| {
-        model.initial_cycles
-            * (state
-                .get_env()
-                .get_settings()
-                .critical_cycles_threshold_percentage as u128)
-            / 100
-    });
-    ht_set_test_cycles(threshold + 1);
+    ht_set_cycles_above_critical_threshold();
 
     // set less balance
     let _r = ht_withdraw_from_account(approved_account_identifier.to_hex(), 1).unwrap();
@@ -1896,9 +1856,12 @@ async fn test_accept_sale_deal_and_fail_transfer() {
     // SET LESS APPROVED AMOUNT TO FAIL TRANSFER
     let approved_account = ht_get_buyer_approved_account(&buyer2);
     let approved_account_identifier = to_account_identifier(&approved_account).unwrap();
-    let approved_account_hex = approved_account_identifier.to_hex();
     let expires_at = get_holder_model(|_, model| model.sale_deal.as_ref().unwrap().expiration_time);
-    ht_approve_account(approved_account_hex.clone(), expires_at, sale_price - 1);
+    ht_approve_account(
+        approved_account_identifier.to_hex(),
+        expires_at,
+        sale_price - 1,
+    );
 
     super::tick().await;
     test_state_matches!(HolderState::Holding {
@@ -1971,16 +1934,7 @@ async fn test_sale_deal_set_buyer_offer_referral() {
     let buyer2_offer_amount = 2 * HT_MIN_PRICE;
     set_test_caller(buyer2);
     let approved_account2 = ht_get_buyer_approved_account(&buyer2);
-    let buyer2_aid = to_account_identifier(&approved_account2).unwrap();
-    let approved_account2_hex = buyer2_aid.to_hex();
-    let expires_at = get_holder_model(|_, model| model.sale_deal.as_ref().unwrap().expiration_time);
-    ht_approve_account(
-        approved_account2_hex.clone(),
-        expires_at,
-        buyer2_offer_amount,
-    );
-    ht_deposit_account(&buyer2_aid, buyer2_offer_amount);
-
+    ht_fund_approved_account(&approved_account2, buyer2_offer_amount);
     let result = set_buyer_offer_int(approved_account2.clone(), None, buyer2_offer_amount).await;
     let holder_information = result_ok_with_holder_information!(result);
     let offer = ht_find_offer_by_buyer(&holder_information, &buyer2).unwrap();

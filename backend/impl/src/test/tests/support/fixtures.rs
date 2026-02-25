@@ -11,6 +11,20 @@ pub(crate) fn fake_neuron(
     fake_neuron_int(id, controller, hot_keys, 12)
 }
 
+/// Creates a fake neuron with **zero stake** (all stake/maturity fields = 0, `None` for
+/// `staked_maturity_e8s_equivalent`).
+///
+/// Use this when a test needs a neuron that should be ignored by the asset-validation
+/// logic (zero-balance neurons are not counted toward the neuron limit).
+#[allow(dead_code)]
+pub(crate) fn fake_neuron_zero_stake(
+    id: u64,
+    controller: Option<Principal>,
+    hot_keys: Vec<Principal>,
+) -> Neuron {
+    fake_neuron_int(id, controller, hot_keys, 0)
+}
+
 fn fake_neuron_int(
     id: u64,
     controller: Option<Principal>,

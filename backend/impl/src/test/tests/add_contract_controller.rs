@@ -31,7 +31,8 @@ use crate::{
             fetch::FetchConfig,
             hold::{drive_after_quarantine, drive_to_standard_hold},
         },
-        ht_get_test_buyer, ht_get_test_deployer, ht_init_test_contract,
+        ht_get_critical_cycles_threshold, ht_get_test_buyer, ht_get_test_deployer,
+        ht_init_test_contract,
         sale::{
             ht_get_buyer_approved_account, ht_set_buyer_offer, ht_set_sale_intentions,
             ht_set_sale_offer,
@@ -82,14 +83,7 @@ async fn test_add_contract_controller() {
     set_test_time(certificate_expiration);
 
     // fail cycles low
-    let threshold = get_holder_model(|state, model| {
-        model.initial_cycles
-            * (state
-                .get_env()
-                .get_settings()
-                .critical_cycles_threshold_percentage as u128)
-            / 100
-    });
+    let threshold = ht_get_critical_cycles_threshold();
     ht_set_test_cycles(threshold);
     let result = add_contract_controller_int(AddContractControllerArgs {
         controller: new_controller,
@@ -151,14 +145,7 @@ async fn test_add_contract_controller_with_sale_intention() {
     set_test_caller(owner);
 
     // fail cycles low
-    let threshold = get_holder_model(|state, model| {
-        model.initial_cycles
-            * (state
-                .get_env()
-                .get_settings()
-                .critical_cycles_threshold_percentage as u128)
-            / 100
-    });
+    let threshold = ht_get_critical_cycles_threshold();
     ht_set_test_cycles(threshold);
     let result = add_contract_controller_int(AddContractControllerArgs {
         controller: new_controller,

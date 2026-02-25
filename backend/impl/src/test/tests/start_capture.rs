@@ -33,7 +33,8 @@ use crate::{
         support::mocks::{
             mock_authn_method_registration_mode_exit_ok, mock_obtain_hub_canister_ok,
         },
-        HT_CAPTURED_IDENTITY_NUMBER, HT_SALE_DEAL_SAFE_CLOSE_DURATION, TEST_CAPTURE_HOSTNAME,
+        HT_CAPTURED_IDENTITY_NUMBER, HT_SALE_DEAL_SAFE_CLOSE_DURATION, HT_STANDARD_CERT_EXPIRATION,
+        TEST_CAPTURE_HOSTNAME,
     },
     test_state_matches,
     updates::holder::{
@@ -202,7 +203,7 @@ async fn test_identity_api_changed() {
     }
 
     ht_holder_authn_method_registration(
-        2 * 24 * 60 * 60 * 1000,
+        HT_STANDARD_CERT_EXPIRATION,
         ht_get_test_deployer(),
         HT_CAPTURED_IDENTITY_NUMBER,
     )

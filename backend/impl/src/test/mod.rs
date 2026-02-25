@@ -14,7 +14,7 @@ mod tests {
     mod releasing;
     mod rewards_calculator;
     mod sale;
-    //    mod serde_candid;
+
     mod start_capture;
 
     use crate::components::{Environment, Settings};
@@ -51,6 +51,48 @@ mod tests {
     /// to keep test code concise.
     pub(crate) async fn tick() {
         crate::handlers::holder::processor::process_holder_with_lock().await;
+    }
+
+    /// Advances the state machine `n` steps.
+    ///
+    /// Prefer this over a series of naked `tick().await` calls whenever you need
+    /// to skip through several well-known intermediate states.  Add a comment
+    /// explaining what each step does so future readers can follow the flow
+    /// without counting ticks.
+    pub(crate) async fn tick_n(n: usize) {
+        for _ in 0..n {
+            crate::handlers::holder::processor::process_holder_with_lock().await;
+        }
+    }
+
+    // =========================================================================
+    // Cycles helpers
+    // =========================================================================
+
+    /// Returns the current critical cycles threshold computed from the canister's
+    /// initial cycle count and the `critical_cycles_threshold_percentage` setting.
+    ///
+    /// Useful when a test needs to assert on the exact threshold value returned in
+    /// an error payload.
+    pub(crate) fn ht_get_critical_cycles_threshold() -> u128 {
+        use crate::handlers::holder::states::get_holder_model;
+        get_holder_model(|state, model| {
+            model.initial_cycles
+                * state
+                    .get_env()
+                    .get_settings()
+                    .critical_cycles_threshold_percentage as u128
+                / 100
+        })
+    }
+
+    /// Sets the test cycle counter to exactly 1 above the critical threshold.
+    ///
+    /// Call this before any operation that requires the canister not to be in the
+    /// critical-cycles state (e.g. `set_buyer_offer_int`, `accept_buyer_offer_int`).
+    pub(crate) fn ht_set_cycles_above_critical_threshold() {
+        use crate::test::tests::components::ic::ht_set_test_cycles;
+        ht_set_test_cycles(ht_get_critical_cycles_threshold() + 1);
     }
 
     pub(crate) fn ht_get_test_hub_canister() -> Principal {
@@ -219,6 +261,24 @@ mod tests {
     pub(crate) const TEST_DELEGATION_EXPIRATION: u64 = 234_213_412_341_234;
     /// Hostname used when constructing test delegation data.
     pub(crate) const TEST_DELEGATION_HOSTNAME: &str = "a.b.c";
+
+    // --- Releasing identity number ---
+
+    /// Identity number used by the majority of `releasing.rs` tests.
+    ///
+    /// The specific value has no semantic meaning — it simply gives the tests a
+    /// recognisable number to `assert_eq!` against `holder_information.identity_number`.
+    pub(crate) const TEST_RELEASING_IDENTITY_NUMBER: u64 = 777;
+
+    // --- Release expiration (millis) ---
+
+    /// Expiration timestamp in **milliseconds** derived from `TEST_RELEASE_EXPIRATION_NANOS`.
+    ///
+    /// `TEST_RELEASE_EXPIRATION_NANOS / 1_000_000 = 60_000`.
+    pub(crate) const TEST_RELEASE_EXPIRATION_MILLIS: u64 =
+        TEST_RELEASE_EXPIRATION_NANOS / 1_000_000;
+
+    // --- Sequential check steps ---
 
     /// Number of sequential sub-account check iterations in the CheckAssets phase.
     ///

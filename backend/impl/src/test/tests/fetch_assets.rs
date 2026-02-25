@@ -1,11 +1,9 @@
 use std::ops::Deref;
 
-use candid::Principal;
 use common_canister_impl::components::{
     nns::api::ListNeuronsResponse,
     nns_dap::api::{AccountDetails, SubAccountDetails},
 };
-use common_canister_types::LedgerAccount;
 use contract_canister_api::types::holder::{
     CancelSaleDealState, DelegationState, FetchAssetsState, FetchIdentityAccountsNnsAssetsState,
     FetchNnsAssetsState, HolderState, HoldingState, LimitFailureReason, UnsellableReason,
@@ -19,6 +17,7 @@ use crate::{
         components::{ic::set_test_caller, time::set_test_time},
         drivers::fetch::{send_delegation_got, FetchConfig},
         ht_get_test_deployer, ht_get_test_other,
+        sale::ht_set_sale_intentions,
         support::{
             fixtures::fake_neuron,
             mocks::{
@@ -28,17 +27,84 @@ use crate::{
             },
         },
         HT_CAPTURED_IDENTITY_NUMBER, HT_MIN_PRICE, HT_QUARANTINE_DURATION,
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION, TEST_DELEGATION_KEY_1,
+        HT_SALE_DEAL_SAFE_CLOSE_DURATION, HT_STANDARD_CERT_EXPIRATION, TEST_DELEGATION_KEY_1,
     },
     test_state_matches,
     updates::holder::{
-        retry_prepare_delegation::retry_prepare_delegation_int,
-        set_sale_intention::set_sale_intention_int, set_sale_offer::set_sale_offer_int,
+        retry_prepare_delegation::retry_prepare_delegation_int, set_sale_offer::set_sale_offer_int,
     },
 };
 use contract_canister_api::retry_prepare_delegation::RetryPrepareDelegationError;
 
 use crate::test::tests::drivers::{capture::drive_to_captured, fetch::drive_to_hold};
+
+// ---------------------------------------------------------------------------
+// Local helpers
+// ---------------------------------------------------------------------------
+
+/// Mocks and drives through 3 pages of neuron responses that together exceed
+/// `max_neurons_allowed` (= 5 in test settings). After this call the state
+/// machine will have transitioned to `Unsellable::CheckLimitFailed::TooManyNeurons`
+/// (or, when a sale deal is active, through `CancelSaleDeal` first).
+///
+/// **Precondition:** state machine is in `GetNeuronsInformation` and
+/// `identity_principal` has already been obtained from model state.
+///
+/// The 3 pages contain 4 neurons each (12 total after page 3), of which
+/// several are controller/hotkey-linked to `identity_principal`, pushing the
+/// counted-neurons total above the limit on page 3.
+async fn mock_drive_neurons_exceeding_limit(identity_principal: candid::Principal) {
+    // Page 1: neurons 1-4 (2 linked to identity_principal)
+    mock_neurons_response(&ListNeuronsResponse {
+        neuron_infos: vec![],
+        full_neurons: vec![
+            fake_neuron(1, None, vec![]),
+            fake_neuron(2, Some(candid::Principal::management_canister()), vec![]),
+            fake_neuron(3, Some(identity_principal), vec![]),
+            fake_neuron(
+                4,
+                Some(identity_principal),
+                vec![candid::Principal::management_canister()],
+            ),
+        ],
+        total_pages_available: None,
+    });
+    super::tick().await;
+
+    // Page 2: neurons 5-8 (3 linked to identity_principal)
+    mock_neurons_response(&ListNeuronsResponse {
+        neuron_infos: vec![],
+        full_neurons: vec![
+            fake_neuron(5, None, vec![]),
+            fake_neuron(6, Some(identity_principal), vec![]),
+            fake_neuron(7, Some(identity_principal), vec![]),
+            fake_neuron(
+                8,
+                Some(identity_principal),
+                vec![candid::Principal::management_canister()],
+            ),
+        ],
+        total_pages_available: None,
+    });
+    super::tick().await;
+
+    // Page 3: neurons 9-12 — limit is exceeded here
+    mock_neurons_response(&ListNeuronsResponse {
+        neuron_infos: vec![],
+        full_neurons: vec![
+            fake_neuron(9, Some(identity_principal), vec![]),
+            fake_neuron(10, Some(identity_principal), vec![]),
+            fake_neuron(11, Some(identity_principal), vec![]),
+            fake_neuron(
+                12,
+                Some(identity_principal),
+                vec![candid::Principal::management_canister()],
+            ),
+        ],
+        total_pages_available: None,
+    });
+    super::tick().await;
+}
 
 // ---------------------------------------------------------------------------
 // test_fetch_assets_fail_certificate_expired
@@ -48,7 +114,7 @@ use crate::test::tests::drivers::{capture::drive_to_captured, fetch::drive_to_ho
 #[tokio::test]
 async fn test_fetch_assets_fail_certificate_expired() {
     drive_to_captured(
-        2 * HT_SALE_DEAL_SAFE_CLOSE_DURATION,
+        HT_STANDARD_CERT_EXPIRATION,
         ht_get_test_deployer(),
         HT_CAPTURED_IDENTITY_NUMBER,
     )
@@ -84,7 +150,7 @@ async fn test_fetch_assets_fail_certificate_expired() {
 #[tokio::test]
 async fn test_fetch_assets() {
     drive_to_hold(
-        2 * 24 * 60 * 60 * 1000,
+        HT_STANDARD_CERT_EXPIRATION,
         ht_get_test_deployer(),
         HT_CAPTURED_IDENTITY_NUMBER,
         &FetchConfig::single_no_neurons(),
@@ -116,7 +182,7 @@ async fn test_fetch_assets() {
 #[tokio::test]
 async fn test_fetch_assets_multiple_accounts() {
     drive_to_hold(
-        2 * 24 * 60 * 60 * 1000,
+        HT_STANDARD_CERT_EXPIRATION,
         ht_get_test_deployer(),
         HT_CAPTURED_IDENTITY_NUMBER,
         &FetchConfig::two_accounts_no_neurons(),
@@ -178,7 +244,7 @@ async fn test_fetch_assets_with_neuron_limit() {
     // Build identity_principal lazily — the driver will set it up; we extract it from state
     // after drive_to_captured so we can build realistic neuron responses.
     drive_to_captured(
-        2 * 24 * 60 * 60 * 1000,
+        HT_STANDARD_CERT_EXPIRATION,
         ht_get_test_deployer(),
         HT_CAPTURED_IDENTITY_NUMBER,
     )
@@ -207,55 +273,7 @@ async fn test_fetch_assets_with_neuron_limit() {
     // State: GetNeuronsInformation — page 1
 
     // Page 1: neurons 1-4 (4 neurons, 1 controlled)
-    mock_neurons_response(&ListNeuronsResponse {
-        neuron_infos: vec![],
-        full_neurons: vec![
-            fake_neuron(1, None, vec![]),
-            fake_neuron(2, Some(Principal::management_canister()), vec![]),
-            fake_neuron(3, Some(identity_principal), vec![]),
-            fake_neuron(
-                4,
-                Some(identity_principal),
-                vec![Principal::management_canister()],
-            ),
-        ],
-        total_pages_available: None,
-    });
-    super::tick().await;
-
-    // Page 2: neurons 5-8
-    mock_neurons_response(&ListNeuronsResponse {
-        neuron_infos: vec![],
-        full_neurons: vec![
-            fake_neuron(5, None, vec![]),
-            fake_neuron(6, Some(identity_principal), vec![]),
-            fake_neuron(7, Some(identity_principal), vec![]),
-            fake_neuron(
-                8,
-                Some(identity_principal),
-                vec![Principal::management_canister()],
-            ),
-        ],
-        total_pages_available: None,
-    });
-    super::tick().await;
-
-    // Page 3: neurons 9-12 — at this point limit is exceeded
-    mock_neurons_response(&ListNeuronsResponse {
-        neuron_infos: vec![],
-        full_neurons: vec![
-            fake_neuron(9, Some(identity_principal), vec![]),
-            fake_neuron(10, Some(identity_principal), vec![]),
-            fake_neuron(11, Some(identity_principal), vec![]),
-            fake_neuron(
-                12,
-                Some(identity_principal),
-                vec![Principal::management_canister()],
-            ),
-        ],
-        total_pages_available: None,
-    });
-    super::tick().await;
+    mock_drive_neurons_exceeding_limit(identity_principal).await;
 
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::Unsellable {
@@ -274,7 +292,7 @@ async fn test_fetch_assets_with_neuron_limit() {
 #[tokio::test]
 async fn test_fetch_assets_with_account_limit() {
     drive_to_captured(
-        2 * 24 * 60 * 60 * 1000,
+        HT_STANDARD_CERT_EXPIRATION,
         ht_get_test_deployer(),
         HT_CAPTURED_IDENTITY_NUMBER,
     )
@@ -373,7 +391,7 @@ async fn test_fetch_assets_with_account_limit() {
 #[tokio::test]
 async fn test_refresh_assets() {
     drive_to_hold(
-        2 * 24 * 60 * 60 * 1000,
+        HT_STANDARD_CERT_EXPIRATION,
         ht_get_test_deployer(),
         HT_CAPTURED_IDENTITY_NUMBER,
         &FetchConfig::single_no_neurons(),
@@ -398,7 +416,7 @@ async fn test_retry_prepare_delegation() {
     let other = ht_get_test_other();
 
     drive_to_captured(
-        2 * HT_SALE_DEAL_SAFE_CLOSE_DURATION,
+        HT_STANDARD_CERT_EXPIRATION,
         owner,
         HT_CAPTURED_IDENTITY_NUMBER,
     )
@@ -514,20 +532,18 @@ async fn test_refetch_with_limit_failure_after_sale() {
     .await;
 
     // Set up sale intention + offer
-    set_test_caller(ht_get_test_deployer());
-    let _ = set_sale_intention_int(LedgerAccount::Account {
-        owner: ht_get_test_deployer(),
-        subaccount: None,
-    })
-    .await;
+    ht_set_sale_intentions(ht_get_test_deployer()).await;
     let result = set_sale_offer_int(HT_MIN_PRICE).await;
     let _ = result_ok_with_holder_information!(result);
 
     // Advance time past quarantine → re-fetch starts
     set_test_time(HT_QUARANTINE_DURATION + 1);
-    // Three ticks: Hold → detect quarantine → StartFetchAssets → GetIdentityAccounts → NeedPrepareDelegation
+    // Two ticks: Hold → detect quarantine expired → StartFetchAssets
     super::tick().await;
     super::tick().await;
+    // State: StartFetchAssets
+
+    // StartFetchAssets → GetIdentityAccounts
     super::tick().await;
 
     // Drive through identity-accounts response (NoAccounts) + delegation
@@ -550,53 +566,7 @@ async fn test_refetch_with_limit_failure_after_sale() {
     ]);
     super::tick().await;
 
-    mock_neurons_response(&ListNeuronsResponse {
-        neuron_infos: vec![],
-        full_neurons: vec![
-            fake_neuron(1, None, vec![]),
-            fake_neuron(2, Some(Principal::management_canister()), vec![]),
-            fake_neuron(3, Some(identity_principal), vec![]),
-            fake_neuron(
-                4,
-                Some(identity_principal),
-                vec![Principal::management_canister()],
-            ),
-        ],
-        total_pages_available: None,
-    });
-    super::tick().await;
-
-    mock_neurons_response(&ListNeuronsResponse {
-        neuron_infos: vec![],
-        full_neurons: vec![
-            fake_neuron(5, None, vec![]),
-            fake_neuron(6, Some(identity_principal), vec![]),
-            fake_neuron(7, Some(identity_principal), vec![]),
-            fake_neuron(
-                8,
-                Some(identity_principal),
-                vec![Principal::management_canister()],
-            ),
-        ],
-        total_pages_available: None,
-    });
-    super::tick().await;
-
-    mock_neurons_response(&ListNeuronsResponse {
-        neuron_infos: vec![],
-        full_neurons: vec![
-            fake_neuron(9, Some(identity_principal), vec![]),
-            fake_neuron(10, Some(identity_principal), vec![]),
-            fake_neuron(11, Some(identity_principal), vec![]),
-            fake_neuron(
-                12,
-                Some(identity_principal),
-                vec![Principal::management_canister()],
-            ),
-        ],
-        total_pages_available: None,
-    });
-    super::tick().await;
+    mock_drive_neurons_exceeding_limit(identity_principal).await;
 
     // With an active sale deal, limit failure triggers CancelSaleDeal first
     test_state_matches!(HolderState::Holding {
