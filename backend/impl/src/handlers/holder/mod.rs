@@ -40,7 +40,19 @@ fn build_holder_information(
         sale_deal: holder_model.sale_deal.clone(),
         completed_sale_deal: holder_model.completed_sale_deal.clone(),
         processing_error: holder_model.processing_error.clone(),
-        fetching_assets: holder_model.fetching_assets.clone(),
+        fetching_assets: {
+            let mut fa = holder_model.fetching_assets.clone();
+            if let (Some(fa), Some(current_nns)) =
+                (fa.as_mut(), holder_model.fetching_nns_assets.as_ref())
+            {
+                if let Some(slots) = fa.nns_assets.as_mut() {
+                    if let Some(slot) = slots.iter_mut().find(|s| s.assets.is_none()) {
+                        slot.assets = Some(current_nns.clone());
+                    }
+                }
+            }
+            fa
+        },
         assets: holder_model.assets.clone(),
         schedule_processing: processing_timer.and_then(|t| {
             if matches!(t.timer_type, ProcessingTimerType::HandleLockExpiration) {
