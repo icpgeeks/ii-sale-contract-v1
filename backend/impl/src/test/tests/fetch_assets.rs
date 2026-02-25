@@ -1,5 +1,6 @@
 use std::ops::Deref;
 
+use crate::handlers::holder::build_holder_information_with_load;
 use common_canister_impl::components::{
     nns::api::ListNeuronsResponse,
     nns_dap::api::{AccountDetails, SubAccountDetails},
@@ -139,6 +140,106 @@ async fn test_fetch_assets_fail_certificate_expired() {
             reason: UnsellableReason::CertificateExpired
         }
     });
+}
+
+// ---------------------------------------------------------------------------
+// test_fetching_assets_includes_current_nns_data
+// ---------------------------------------------------------------------------
+
+/// Verifies that `build_holder_information_with_load` merges `fetching_nns_assets`
+/// (in-progress data for the currently-fetched account) into the corresponding slot
+/// of `fetching_assets.nns_assets` in the returned `HolderInformation`.
+///
+/// The test pauses mid-fetch, after a neurons-information page has been processed
+/// (so `fetching_nns_assets.controlled_neurons` is `Some`), and asserts that the
+/// slot for the active account in `fetching_assets` reflects that data rather than
+/// remaining `None`.
+#[tokio::test]
+async fn test_fetching_assets_includes_current_nns_data() {
+    use crate::test::tests::support::{
+        fixtures::fake_neuron,
+        mocks::{mock_neuron_ids, mock_neurons_response, mock_prepare_delegation_ok_default},
+    };
+
+    drive_to_captured(
+        HT_STANDARD_CERT_EXPIRATION,
+        ht_get_test_deployer(),
+        HT_CAPTURED_IDENTITY_NUMBER,
+    )
+    .await;
+
+    // StartFetchAssets → GetIdentityAccounts
+    super::tick().await;
+
+    // Single account path: send NoAccounts → NeedPrepareDelegation
+    mock_identity_accounts_no_accounts();
+    super::tick().await;
+
+    // NeedPrepareDelegation → GetDelegationWaiting
+    mock_prepare_delegation_ok_default();
+    super::tick().await;
+
+    // Deliver delegation → GetNeuronsIds
+    send_delegation_got(TEST_DELEGATION_KEY_1.to_vec());
+
+    // Send 1 neuron ID → GetNeuronsInformation
+    // At this point fetching_nns_assets is initialised:
+    //   Some(NnsHolderAssets { controlled_neurons: None, accounts: None })
+    mock_neuron_ids(vec![1u64]);
+    super::tick().await;
+
+    // Extract the delegation principal so we can build a realistic neuron response.
+    let identity_principal =
+        get_holder_model(|_, model| model.get_delegation_controller().unwrap());
+
+    // Mock one neuron page — controlled_neurons will be filled in fetching_nns_assets.
+    let neuron = fake_neuron(1, Some(identity_principal), vec![]);
+    mock_neurons_response(&ListNeuronsResponse {
+        neuron_infos: vec![],
+        full_neurons: vec![neuron],
+        total_pages_available: None,
+    });
+    super::tick().await;
+    // State: GetNeuronsInformation (page processed) or DeletingNeuronsHotkeys.
+    // fetching_nns_assets.controlled_neurons is now Some([...]).
+
+    // Capture the current fetching_nns_assets value from the model to compare against.
+    let expected_nns_assets = get_holder_model(|_, model| model.fetching_nns_assets.clone());
+    assert!(
+        expected_nns_assets.is_some(),
+        "fetching_nns_assets should be set while an account fetch is in progress"
+    );
+
+    // Build the holder information response and verify the merge.
+    let holder_info = build_holder_information_with_load();
+
+    let fetching = holder_info
+        .fetching_assets
+        .expect("fetching_assets should be present during fetch");
+    let slots = fetching
+        .nns_assets
+        .expect("nns_assets slots should be present");
+
+    assert_eq!(
+        slots.len(),
+        1,
+        "should have exactly 1 identity account slot"
+    );
+
+    let slot_assets = slots[0]
+        .assets
+        .as_ref()
+        .expect("slot.assets should be filled from fetching_nns_assets, not None");
+
+    assert_eq!(
+        slot_assets,
+        expected_nns_assets.as_ref().unwrap(),
+        "slot.assets must equal model.fetching_nns_assets"
+    );
+    assert!(
+        slot_assets.controlled_neurons.is_some(),
+        "controlled_neurons should be populated after neurons-information page was processed"
+    );
 }
 
 // ---------------------------------------------------------------------------
