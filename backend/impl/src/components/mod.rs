@@ -20,6 +20,15 @@ use std::rc::Rc;
 
 use crate::components::referral::Referral;
 
+#[cfg(not(any(network = "local", network = "test")))]
+pub mod factory;
+
+#[cfg(network = "local")]
+#[path = "../../../../target/factory_local.rs"]
+pub mod factory;
+
+#[cfg(network = "test")]
+#[path = "../../../../target/factory_test.rs"]
 pub mod factory;
 
 pub mod referral;
