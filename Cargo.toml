@@ -7,18 +7,12 @@ members = [
 ]
 
 [workspace.dependencies]
-# common_canister_types = { git = "https://github.com/geekfactory-core/common.git", tag = "0.0.1" }
-# common_canister_api = { git = "https://github.com/geekfactory-core/common.git", tag = "0.0.1" }
-# common_contract_api = { git = "https://github.com/geekfactory-core/common.git", tag = "0.0.1" }
-# referral_c2c_client = { git = "https://github.com/geekfactory-core/common.git", tag = "0.0.1" }
-# common_canister_impl = { git = "https://github.com/geekfactory-core/common.git", tag = "0.0.1" }
-# common_embed_assets = { git = "https://github.com/geekfactory-core/common.git", tag = "0.0.1" }
-common_canister_types = { path = "../common/lib/canister/types" }
-common_canister_api = { path = "../common/lib/canister/api" }
-common_contract_api = { path = "../common/lib/contract/api" }
-referral_c2c_client = { path = "../common/lib/referral/c2c_client" }
-common_canister_impl = { path = "../common/lib/canister/impl" }
-common_embed_assets = { path = "../common/lib/common_embed_assets" }
+common_canister_types = { git = "https://github.com/geekfactory-core/common.git", branch = "feature/ii-multi-account-support" }
+common_canister_api = { git = "https://github.com/geekfactory-core/common.git", branch = "feature/ii-multi-account-support" }
+common_contract_api = { git = "https://github.com/geekfactory-core/common.git", branch = "feature/ii-multi-account-support" }
+referral_c2c_client = { git = "https://github.com/geekfactory-core/common.git", branch = "feature/ii-multi-account-support" }
+common_canister_impl = { git = "https://github.com/geekfactory-core/common.git", branch = "feature/ii-multi-account-support" }
+common_embed_assets = { git = "https://github.com/geekfactory-core/common.git", branch = "feature/ii-multi-account-support" }
 candid = "0.10.20"
 serde = "1.0.228"
 serde_cbor = "0.11.2"

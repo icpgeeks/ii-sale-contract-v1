@@ -280,6 +280,7 @@ dependencies = [
 [[package]]
 name = "common_canister_api"
 version = "0.0.1"
+source = "git+https://github.com/geekfactory-core/common.git?branch=feature%2Fii-multi-account-support#02c9ee90e0f2089c535f6dc676b8e92cb0942af3"
 dependencies = [
  "candid",
  "common_canister_types",
@@ -290,6 +291,7 @@ dependencies = [
 [[package]]
 name = "common_canister_impl"
 version = "0.0.1"
+source = "git+https://github.com/geekfactory-core/common.git?branch=feature%2Fii-multi-account-support#02c9ee90e0f2089c535f6dc676b8e92cb0942af3"
 dependencies = [
  "async-trait",
  "candid",
@@ -320,6 +322,7 @@ dependencies = [
 [[package]]
 name = "common_canister_types"
 version = "0.0.1"
+source = "git+https://github.com/geekfactory-core/common.git?branch=feature%2Fii-multi-account-support#02c9ee90e0f2089c535f6dc676b8e92cb0942af3"
 dependencies = [
  "candid",
  "serde",
@@ -329,6 +332,7 @@ dependencies = [
 [[package]]
 name = "common_contract_api"
 version = "0.0.1"
+source = "git+https://github.com/geekfactory-core/common.git?branch=feature%2Fii-multi-account-support#02c9ee90e0f2089c535f6dc676b8e92cb0942af3"
 dependencies = [
  "candid",
  "common_canister_types",
@@ -339,6 +343,7 @@ dependencies = [
 [[package]]
 name = "common_embed_assets"
 version = "0.0.1"
+source = "git+https://github.com/geekfactory-core/common.git?branch=feature%2Fii-multi-account-support#02c9ee90e0f2089c535f6dc676b8e92cb0942af3"
 dependencies = [
  "brotli",
  "flate2",
@@ -1375,6 +1380,7 @@ dependencies = [
 [[package]]
 name = "referral_c2c_client"
 version = "0.0.1"
+source = "git+https://github.com/geekfactory-core/common.git?branch=feature%2Fii-multi-account-support#02c9ee90e0f2089c535f6dc676b8e92cb0942af3"
 dependencies = [
  "candid",
  "ic-cdk",
@@ -1385,6 +1391,7 @@ dependencies = [
 [[package]]
 name = "referral_canister_api"
 version = "0.0.1"
+source = "git+https://github.com/geekfactory-core/common.git?branch=feature%2Fii-multi-account-support#02c9ee90e0f2089c535f6dc676b8e92cb0942af3"
 dependencies = [
  "candid",
  "common_canister_types",
