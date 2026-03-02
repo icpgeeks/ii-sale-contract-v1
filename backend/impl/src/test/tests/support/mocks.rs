@@ -1,11 +1,11 @@
 use candid::{Encode, Principal};
 use common_canister_impl::components::{
     identity::api::{
-        AuthnMethodConfirmRet, AuthnMethodConfirmationCode, AuthnMethodConfirmationError,
-        AuthnMethodData, AuthnMethodRegisterError, AuthnMethodRegisterRet,
-        AuthnMethodRegistrationModeEnterRet, AuthnMethodRegistrationModeExitError,
-        AuthnMethodRegistrationModeExitRet, AuthnMethodRemoveRet, GetAccountsError,
-        GetAccountsResponse, IdentityInfo, IdentityInfoRet, MetadataMapV2,
+        AccountInfo, AuthnMethodConfirmRet, AuthnMethodConfirmationCode,
+        AuthnMethodConfirmationError, AuthnMethodData, AuthnMethodRegisterError,
+        AuthnMethodRegisterRet, AuthnMethodRegistrationModeEnterRet,
+        AuthnMethodRegistrationModeExitError, AuthnMethodRegistrationModeExitRet,
+        AuthnMethodRemoveRet, GetAccountsError, IdentityInfo, IdentityInfoRet, MetadataMapV2,
         PrepareAccountDelegation, PrepareAccountDelegationRet,
     },
     nns::api::ListNeuronsResponse,
@@ -21,15 +21,15 @@ use super::super::{TEST_DELEGATION_EXPIRATION, TEST_DELEGATION_KEY_1};
 // Identity accounts
 // ---------------------------------------------------------------------------
 
-/// Mocks IC agent response: identity has no accounts (NoAccounts error).
+/// Mocks IC agent response: identity has no accounts (empty list).
 pub(crate) fn mock_identity_accounts_no_accounts() {
-    let m: Result<GetAccountsResponse, GetAccountsError> = Err(GetAccountsError::NoAccounts);
+    let m: Result<Vec<AccountInfo>, GetAccountsError> = Ok(vec![]);
     set_test_ic_agent_response(Encode!(&m).unwrap());
 }
 
-/// Mocks IC agent response: identity returns the given accounts response.
-pub(crate) fn mock_identity_accounts_ok(response: GetAccountsResponse) {
-    let m: Result<GetAccountsResponse, GetAccountsError> = Ok(response);
+/// Mocks IC agent response: identity returns the given accounts list.
+pub(crate) fn mock_identity_accounts_ok(accounts: Vec<AccountInfo>) {
+    let m: Result<Vec<AccountInfo>, GetAccountsError> = Ok(accounts);
     set_test_ic_agent_response(Encode!(&m).unwrap());
 }
 

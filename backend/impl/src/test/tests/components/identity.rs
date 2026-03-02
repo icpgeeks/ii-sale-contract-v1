@@ -5,13 +5,13 @@ use candid::Principal;
 use common_canister_impl::{
     components::identity::{
         api::{
-            AccountNumber, AuthnMethod, AuthnMethodConfirmRet, AuthnMethodConfirmationCode,
-            AuthnMethodData, AuthnMethodRegisterError, AuthnMethodRegisterRet,
-            AuthnMethodRegistrationModeEnterRet, AuthnMethodRegistrationModeExitRet,
-            AuthnMethodRemoveRet, GetAccountsError, GetAccountsResponse, GetDefaultAccountRet,
-            GetDelegationResponse, IdentityAuthnInfo, IdentityAuthnInfoRet, IdentityInfoRet,
-            OpenidCredentialRemoveRet, PrepareAccountDelegationRet, PublicKey, RegistrationId,
-            UserNumber, WebAuthn,
+            AccountInfo, AccountNumber, AuthnMethod, AuthnMethodConfirmRet,
+            AuthnMethodConfirmationCode, AuthnMethodData, AuthnMethodRegisterError,
+            AuthnMethodRegisterRet, AuthnMethodRegistrationModeEnterRet,
+            AuthnMethodRegistrationModeExitRet, AuthnMethodRemoveRet, GetAccountsError,
+            GetDefaultAccountRet, GetDelegationResponse, IdentityAuthnInfo, IdentityAuthnInfoRet,
+            IdentityInfoRet, OpenidCredentialRemoveRet, PrepareAccountDelegationRet, PublicKey,
+            RegistrationId, UserNumber, WebAuthn,
         },
         interface::Identity,
         interface_impl::IdentityImpl,
@@ -319,7 +319,7 @@ impl Identity for IdentityTest {
     fn decode_get_accounts_response(
         &self,
         response_data: &[u8],
-    ) -> Result<Result<GetAccountsResponse, GetAccountsError>, String> {
+    ) -> Result<Result<Vec<AccountInfo>, GetAccountsError>, String> {
         self.proxy.decode_get_accounts_response(response_data)
     }
 

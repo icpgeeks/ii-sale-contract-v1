@@ -1,6 +1,6 @@
 use candid::Principal;
 use common_canister_impl::components::{
-    identity::api::{AccountInfo, GetAccountsResponse},
+    identity::api::AccountInfo,
     nns::api::ListNeuronsResponse,
     nns_dap::api::{AccountDetails, SubAccountDetails},
 };
@@ -67,8 +67,8 @@ pub struct AccountFetchConfig {
 /// Top-level configuration for driving the fetch-assets + check-assets phase.
 pub struct FetchConfig {
     /// One entry per identity account to process.
-    /// - Single entry  → driver sends `NoAccounts` for `GetIdentityAccounts`.
-    /// - Multiple entries → driver sends a proper `GetAccountsResponse`.
+    /// - Single entry  → driver sends an empty list for `GetIdentityAccounts`.
+    /// - Multiple entries → driver sends a proper `Vec<AccountInfo>`.
     pub accounts: Vec<AccountFetchConfig>,
 }
 
@@ -343,10 +343,10 @@ async fn drive_nns_account(config: &AccountFetchConfig) {
     super::super::tick().await;
 }
 
-/// Builds a `GetAccountsResponse` from the given account list.
+/// Builds a `Vec<AccountInfo>` from the given account list.
 /// First account → `account_number: None` (default), subsequent → `Some(n)` starting at 1.
-fn build_accounts_response(accounts: &[AccountFetchConfig]) -> GetAccountsResponse {
-    let account_infos: Vec<AccountInfo> = accounts
+fn build_accounts_list(accounts: &[AccountFetchConfig]) -> Vec<AccountInfo> {
+    accounts
         .iter()
         .enumerate()
         .map(|(i, _)| AccountInfo {
@@ -359,11 +359,7 @@ fn build_accounts_response(accounts: &[AccountFetchConfig]) -> GetAccountsRespon
                 Some(format!("Account {i}"))
             },
         })
-        .collect();
-    GetAccountsResponse {
-        accounts: account_infos,
-        default_account: 0,
-    }
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -381,11 +377,11 @@ pub(crate) async fn drive_to_finish_fetch_assets(config: &FetchConfig) {
 
     // GetIdentityAccounts: respond based on account count
     if config.accounts.len() <= 1 {
-        // Single account: send NoAccounts — state machine uses the one default NNS account
+        // Single account: send empty list — state machine inserts the default account
         mock_identity_accounts_no_accounts();
     } else {
         // Multiple accounts: send the full list
-        mock_identity_accounts_ok(build_accounts_response(&config.accounts));
+        mock_identity_accounts_ok(build_accounts_list(&config.accounts));
     }
     super::super::tick().await;
     // State: NeedPrepareDelegation (for first account)

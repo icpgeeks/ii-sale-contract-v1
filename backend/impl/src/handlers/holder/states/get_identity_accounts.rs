@@ -1,4 +1,4 @@
-use common_canister_impl::components::identity::api::GetAccountsError;
+use common_canister_impl::components::identity::api::{AccountInfo, GetAccountsError};
 use common_canister_impl::handlers::build_ic_agent_request;
 use contract_canister_api::types::holder::{
     FetchAssetsEvent,
@@ -50,45 +50,8 @@ pub(crate) async fn process(
         .map_err(to_internal_error)?;
 
     let accounts: Vec<(Option<IdentityAccountNumber>, Option<String>)> = match get_accounts_result {
-        Ok(response) => {
-            // Build list: default account (None) + all named accounts (Some(n))
-            // The default account has account_number == None in AccountInfo.
-            // We include all accounts from the response.
-            let mut accounts: Vec<(Option<IdentityAccountNumber>, Option<String>)> = response
-                .accounts
-                .iter()
-                .map(|info| (info.account_number, info.name.clone()))
-                .collect();
-
-            // Ensure default account (None) is present — it should always be in the list,
-            // but if the response doesn't include it explicitly, add it at the front.
-            if !accounts.iter().any(|(n, _)| n.is_none()) {
-                accounts.insert(0, (None, None));
-            }
-
-            log_info!(
-                env,
-                "Identity accounts: found {} accounts: {:?}",
-                accounts.len(),
-                accounts.iter().map(|(n, _)| n).collect::<Vec<_>>()
-            );
-
-            accounts
-        }
+        Ok(response) => build_accounts_list(env, response),
         Err(error) => match error {
-            GetAccountsError::NoAccounts => {
-                // No accounts registered for this origin — use default account only
-                log_info!(
-                    env,
-                    "Identity accounts: no NNS accounts found, using default account only."
-                );
-                vec![(None, None)]
-            }
-            GetAccountsError::NoSuchAnchor => {
-                return Err(HolderProcessingError::InternalError {
-                    error: "Identity accounts: anchor not found in Internet Identity".to_string(),
-                });
-            }
             GetAccountsError::InternalCanisterError(reason) => {
                 return Err(to_ic_agent_error(reason));
             }
@@ -113,4 +76,41 @@ pub(crate) async fn process(
     )?;
 
     Ok(ProcessingResult::Continue)
+}
+
+fn build_accounts_list(
+    env: &Environment,
+    response: Vec<AccountInfo>,
+) -> Vec<(Option<IdentityAccountNumber>, Option<String>)> {
+    if response.is_empty() {
+        // No accounts registered for this origin — use default account only
+        log_info!(
+            env,
+            "Identity accounts: no NNS accounts found, using default account only."
+        );
+        return vec![(None, None)];
+    }
+
+    // Build list: default account (None) + all named accounts (Some(n))
+    // The default account has account_number == None in AccountInfo.
+    // We include all accounts from the response.
+    let mut accounts: Vec<(Option<IdentityAccountNumber>, Option<String>)> = response
+        .iter()
+        .map(|info| (info.account_number, info.name.clone()))
+        .collect();
+
+    // Ensure default account (None) is present — it should always be in the list,
+    // but if the response doesn't include it explicitly, add it at the front.
+    if !accounts.iter().any(|(n, _)| n.is_none()) {
+        accounts.insert(0, (None, None));
+    }
+
+    log_info!(
+        env,
+        "Identity accounts: found {} accounts: {:?}",
+        accounts.len(),
+        accounts.iter().map(|(n, _)| n).collect::<Vec<_>>()
+    );
+
+    accounts
 }
