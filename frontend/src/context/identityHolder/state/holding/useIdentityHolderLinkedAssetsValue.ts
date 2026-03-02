@@ -5,7 +5,7 @@ import {getAccountIdentifierHexFromByteArraySafe} from 'frontend/src/utils/ic/ac
 import {useCallback, useMemo} from 'react';
 
 import {applicationLogger} from 'frontend/src/context/logger/logger';
-import type {AccountInformation, AccountsInformation, HolderAssets, NeuronAsset, NeuronInformation, SubAccountInformation} from 'src/declarations/contract/contract.did';
+import type {AccountInformation, AccountsInformation, HolderAssets, NeuronAsset, NeuronInformation, NnsHolderAssets, SubAccountInformation} from 'src/declarations/contract/contract.did';
 import {useIdentityHolderContext} from '../../IdentityHolderProvider';
 
 type ContextNoAssets = {
@@ -54,15 +54,34 @@ type Neurons = {
     earliestTimestampMillis: bigint;
 };
 
+// Data for one identity account slot
+export type IdentityAccountAssets = {
+    identityAccountNumber: bigint | undefined;
+    principal: Principal;
+    accounts: Accounts | undefined;
+    neurons: Neurons | undefined;
+    totalValueUlps: bigint;
+    numberOfAccounts: number;
+    numberOfNeurons: number;
+    earliestTimestampMillis: bigint | undefined;
+};
+
 type ContextValidAssets = {
     type: 'assets';
 
+    // Per-identity-account data, indexed by slot order
+    identityAccounts: Array<IdentityAccountAssets>;
+
+    // Flat list for AccountList UI (all accounts from all slots in slot order)
+    allAccounts: Array<MainAccount | SubAccount>;
+
+    // Aggregated neurons across all slots (unique neuron_ids verified), for NeuronList + stats
+    neurons: Neurons | undefined;
+
+    // Aggregated totals
     totalValueUlps: bigint;
     earliestTimestampMillis: bigint | undefined;
-
-    accounts: Accounts | undefined;
     numberOfAccounts: number;
-    neurons: Neurons | undefined;
     numberOfNeurons: number;
 };
 
@@ -80,49 +99,108 @@ export const useIdentityHolderLinkedAssetsValue = (): Context => {
             return {type: 'noAssets'};
         }
 
-        /**
-         * parse accounts
-         */
-        const parsedAccounts = getAccounts(assets.accounts);
-        if (parsedAccounts.type == 'invalidAccounts') {
-            applicationLogger.log('Failed to parse accounts', {accounts: assets.accounts});
-            return {type: 'invalidAssets'};
-        }
+        const slots = fromNullable(assets.nns_assets) ?? [];
 
-        /**
-         * parse neurons
-         */
-        const parsedNeurons = getControlledNeurons(assets.controlled_neurons);
-        if (parsedNeurons.type == 'invalidNeurons') {
-            applicationLogger.log('Failed to parse neurons', {neurons: assets.controlled_neurons});
-            return {type: 'invalidAssets'};
-        }
-
-        if (parsedAccounts.type == 'noAccounts' && parsedNeurons.type == 'noNeurons') {
+        // nns_assets present but empty = no identity accounts = noAssets
+        if (slots.length === 0) {
             return {type: 'noAssets'};
         }
 
-        const accounts: Accounts | undefined = parsedAccounts.type == 'validAccounts' ? parsedAccounts.accounts : undefined;
-        const accountsTotalValueUlps = accounts?.totalValueUlps ?? 0n;
-        /**
-         * +1 for main account
-         */
-        const numberOfAccounts = isNullish(accounts) ? 0 : accounts.subAccounts.length + 1;
+        // Parse every slot; bail immediately on any failure
+        const parsedSlots: Array<IdentityAccountAssets> = [];
+        for (const slot of slots) {
+            const nnsAssets = fromNullishNullable(slot.assets);
 
-        const neurons: Neurons | undefined = parsedNeurons.type == 'validNeurons' ? parsedNeurons.neurons : undefined;
-        const numberOfNeurons = isNullish(neurons) ? 0 : neurons.neurons.length;
-        const neuronsTotalValueUlps = neurons?.totalStakeUlps ?? 0n;
+            // slot.assets = None in completed holder assets → data is missing → invalidAssets
+            if (isNullish(nnsAssets)) {
+                applicationLogger.log('slot.assets is null in completed holder assets', {slot});
+                return {type: 'invalidAssets'};
+            }
 
-        const totalValueUlps = accountsTotalValueUlps + neuronsTotalValueUlps;
-        const earliestTimestampMillisArray = compactArray([accounts?.earliestTimestampMillis, neurons?.earliestTimestampMillis]);
-        const earliestTimestampMillis = isEmptyArray(earliestTimestampMillisArray) ? undefined : earliestTimestampMillisArray.reduce((a, b) => (a < b ? a : b));
+            // principal must always be present after successful fetch
+            const principal = fromNullishNullable(slot.principal);
+            if (isNullish(principal)) {
+                applicationLogger.log('slot.principal is null in completed holder assets', {slot});
+                return {type: 'invalidAssets'};
+            }
+
+            const parsedAccounts = getAccounts(nnsAssets.accounts);
+            if (parsedAccounts.type === 'invalidAccounts') {
+                applicationLogger.log('Failed to parse accounts for slot', {slot});
+                return {type: 'invalidAssets'};
+            }
+
+            const parsedNeurons = getControlledNeurons(nnsAssets.controlled_neurons);
+            if (parsedNeurons.type === 'invalidNeurons') {
+                applicationLogger.log('Failed to parse neurons for slot', {slot});
+                return {type: 'invalidAssets'};
+            }
+
+            const accounts: Accounts | undefined = parsedAccounts.type === 'validAccounts' ? parsedAccounts.accounts : undefined;
+            const neurons: Neurons | undefined = parsedNeurons.type === 'validNeurons' ? parsedNeurons.neurons : undefined;
+
+            const accountsValue = accounts?.totalValueUlps ?? 0n;
+            const neuronsValue = neurons?.totalStakeUlps ?? 0n;
+            const totalValueUlps = accountsValue + neuronsValue;
+            const numberOfAccounts = isNullish(accounts) ? 0 : accounts.subAccounts.length + 1;
+            const numberOfNeurons = neurons?.neurons.length ?? 0;
+            const tsArray = compactArray([accounts?.earliestTimestampMillis, neurons?.earliestTimestampMillis]);
+            const earliestTimestampMillis = isEmptyArray(tsArray) ? undefined : tsArray.reduce((a, b) => (a < b ? a : b));
+
+            parsedSlots.push({
+                identityAccountNumber: fromNullable(slot.identity_account_number),
+                principal,
+                accounts,
+                neurons,
+                totalValueUlps,
+                numberOfAccounts,
+                numberOfNeurons,
+                earliestTimestampMillis
+            });
+        }
+
+        // If every slot has no accounts AND no neurons → noAssets
+        const hasAnyData = parsedSlots.some((s) => s.numberOfAccounts > 0 || s.numberOfNeurons > 0);
+        if (!hasAnyData) {
+            return {type: 'noAssets'};
+        }
+
+        // Build flat allAccounts (main + sub from each slot in order)
+        const allAccounts: Array<MainAccount | SubAccount> = parsedSlots.flatMap((s) => {
+            if (isNullish(s.accounts)) {
+                return [];
+            }
+            return [s.accounts.mainAccount, ...s.accounts.subAccounts];
+        });
+
+        // Validate no neuron_id appears in more than one slot — by spec this must never happen
+        const allNeuronsList = parsedSlots.flatMap((s) => s.neurons?.neurons ?? []);
+        const neuronIdSet = new Set<bigint>();
+        for (const neuron of allNeuronsList) {
+            if (neuronIdSet.has(neuron.neuronId)) {
+                applicationLogger.log('Duplicate neuron_id across identity account slots', {neuronId: neuron.neuronId});
+                return {type: 'invalidAssets'};
+            }
+            neuronIdSet.add(neuron.neuronId);
+        }
+
+        const neurons: Neurons | undefined = allNeuronsList.length > 0 ? buildAggregatedNeurons(allNeuronsList) : undefined;
+
+        const totalValueUlps = parsedSlots.reduce((sum, s) => sum + s.totalValueUlps, 0n);
+        const numberOfAccounts = parsedSlots.reduce((sum, s) => sum + s.numberOfAccounts, 0);
+        const numberOfNeurons = allNeuronsList.length;
+
+        const allTs = compactArray(parsedSlots.map((s) => s.earliestTimestampMillis));
+        const earliestTimestampMillis = isEmptyArray(allTs) ? undefined : allTs.reduce((a, b) => (a < b ? a : b));
+
         return {
             type: 'assets',
-            earliestTimestampMillis,
-            totalValueUlps,
-            accounts,
-            numberOfAccounts,
+            identityAccounts: parsedSlots,
+            allAccounts,
             neurons,
+            totalValueUlps,
+            earliestTimestampMillis,
+            numberOfAccounts,
             numberOfNeurons
         };
     }, [holder, completedSaleDeal]);
@@ -136,7 +214,7 @@ Accounts
 ==========================================
 */
 
-const getAccounts = (accounts: HolderAssets['accounts']): {type: 'noAccounts'} | {type: 'invalidAccounts'} | {type: 'validAccounts'; accounts: Accounts} => {
+const getAccounts = (accounts: NnsHolderAssets['accounts']): {type: 'noAccounts'} | {type: 'invalidAccounts'} | {type: 'validAccounts'; accounts: Accounts} => {
     const accountsInformation: AccountsInformation | undefined = fromNullishNullable(fromNullable(accounts)?.value);
     if (isNullish(accountsInformation)) {
         return {type: 'noAccounts'};
@@ -300,8 +378,14 @@ const getNeuronsWeightedAverageAge = (neurons: Array<Neuron>, neuronsTotalStakeU
 const getNeuronsWeightedAverageDissolveDelay = (neurons: Array<Neuron>, neuronsTotalStakeUlps: bigint): bigint | undefined => {
     return calculateWeightedAverage(neurons, neuronsTotalStakeUlps, (neuron) => neuron.dissolveDelaySeconds);
 };
-
-const getControlledNeurons = (controlledNeurons: HolderAssets['controlled_neurons']): {type: 'noNeurons'} | {type: 'invalidNeurons'} | {type: 'validNeurons'; neurons: Neurons} => {
+const buildAggregatedNeurons = (neurons: Array<Neuron>): Neurons => {
+    const totalStakeUlps = neurons.reduce((acc, n) => acc + n.totalStakeUlps, 0n);
+    const weightedAverageNeuronAge = getNeuronsWeightedAverageAge(neurons, totalStakeUlps);
+    const weightedAverageDissolveDelay = getNeuronsWeightedAverageDissolveDelay(neurons, totalStakeUlps);
+    const earliestTimestampMillis = neurons.map((n) => n.timestampMillis).reduce((a, b) => (a < b ? a : b));
+    return {totalStakeUlps, weightedAverageNeuronAge, weightedAverageDissolveDelay, neurons, earliestTimestampMillis};
+};
+const getControlledNeurons = (controlledNeurons: NnsHolderAssets['controlled_neurons']): {type: 'noNeurons'} | {type: 'invalidNeurons'} | {type: 'validNeurons'; neurons: Neurons} => {
     const neuronAssets: Array<NeuronAsset> | undefined = fromNullable(controlledNeurons)?.value;
 
     if (isNullish(neuronAssets)) {
