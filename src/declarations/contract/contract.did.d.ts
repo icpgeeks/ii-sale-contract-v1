@@ -224,13 +224,15 @@ export type CheckAssetsEvent = {
   { 'AccountHasApprove' : { 'sub_account' : Uint8Array | number[] } } |
   { 'CheckAssetsStarted' : null } |
   {
-    'CheckAccountsPrepared' : { 'sub_accounts' : Array<Uint8Array | number[]> }
+    'CheckAccountsPrepared' : {
+      'sub_accounts' : Array<[Principal, Uint8Array | number[]]>,
+    }
   };
 export type CheckAssetsState = { 'CheckAccountsForNoApprovePrepare' : null } |
   { 'FinishCheckAssets' : null } |
   {
     'CheckAccountsForNoApproveSequential' : {
-      'sub_accounts' : Array<Uint8Array | number[]>,
+      'sub_accounts' : Array<[Principal, Uint8Array | number[]]>,
     }
   } |
   { 'StartCheckAssets' : null };
@@ -283,7 +285,10 @@ export interface DelegationData {
   'timestamp' : bigint,
 }
 export type DelegationState = {
-    'NeedPrepareDelegation' : { 'hostname' : string }
+    'NeedPrepareDelegation' : {
+      'identity_account_number' : [] | [bigint],
+      'hostname' : string,
+    }
   } |
   {
     'GetDelegationWaiting' : {
@@ -302,6 +307,12 @@ export type FetchAssetsEvent = {
   {
     'NeuronsInformationGotEmpty' : { 'neuron_ids' : BigUint64Array | bigint[] }
   } |
+  {
+    'IdentityAccountsGot' : {
+      'account_numbers' : Array<[] | [bigint]>,
+      'hostname' : string,
+    }
+  } |
   { 'NeuronsIdsGot' : { 'neuron_ids' : BigUint64Array | bigint[] } } |
   { 'AccountsBalancesObtained' : null } |
   {
@@ -310,6 +321,9 @@ export type FetchAssetsEvent = {
       'failed' : [] | [string],
       'neuron_id' : bigint,
     }
+  } |
+  {
+    'NnsAssetsForAccountFetched' : { 'identity_account_number' : [] | [bigint] }
   } |
   { 'TooManyNeurons' : null } |
   { 'ObtainDelegation' : { 'event' : ObtainDelegationEvent } } |
@@ -328,15 +342,25 @@ export type FetchAssetsEvent = {
   } |
   { 'FetchAssetsStarted' : { 'fetch_assets_state' : FetchAssetsState } } |
   { 'FetchAssetsFinished' : null };
-export type FetchAssetsState = { 'FinishFetchAssets' : null } |
-  {
-    'ObtainDelegationState' : {
-      'sub_state' : DelegationState,
-      'wrap_fetch_state' : FetchAssetsState,
+export type FetchAssetsState = {
+    'FetchIdentityAccountsNnsAssetsState' : {
+      'sub_state' : FetchIdentityAccountsNnsAssetsState,
     }
   } |
-  { 'FetchNnsAssetsState' : { 'sub_state' : FetchNnsAssetsState } } |
+  { 'FinishFetchAssets' : null } |
   { 'StartFetchAssets' : null };
+export type FetchIdentityAccountsNnsAssetsState = {
+    'FinishCurrentNnsAccountFetch' : {
+      'identity_account_number' : [] | [bigint],
+    }
+  } |
+  { 'GetIdentityAccounts' : null } |
+  {
+    'FetchNnsAssetsState' : {
+      'identity_account_number' : [] | [bigint],
+      'sub_state' : FetchNnsAssetsState,
+    }
+  };
 export type FetchNnsAssetsState = { 'GetNeuronsIds' : null } |
   {
     'GetNeuronsInformation' : {
@@ -346,6 +370,12 @@ export type FetchNnsAssetsState = { 'GetNeuronsIds' : null } |
   {
     'DeletingNeuronsHotkeys' : {
       'neuron_hotkeys' : Array<[bigint, Array<Principal>]>,
+    }
+  } |
+  {
+    'ObtainDelegationState' : {
+      'sub_state' : DelegationState,
+      'wrap_fetch_state' : FetchNnsAssetsState,
     }
   } |
   { 'GetAccountsInformation' : null } |
@@ -388,8 +418,7 @@ export interface GetHolderEventsResult {
 }
 export type GetHolderInformationResponse = { 'Ok' : ProcessHolderResult };
 export interface HolderAssets {
-  'controlled_neurons' : [] | [Timestamped_1],
-  'accounts' : [] | [Timestamped_3],
+  'nns_assets' : [] | [Array<IdentityAccountNnsAssets>],
 }
 export interface HolderInformation {
   'identity_name' : [] | [string],
@@ -481,6 +510,11 @@ export interface IdentifiedHolderProcessingEvent {
   'time' : bigint,
   'event' : HolderProcessingEvent,
 }
+export interface IdentityAccountNnsAssets {
+  'identity_account_number' : [] | [bigint],
+  'principal' : [] | [Principal],
+  'assets' : [] | [NnsHolderAssets],
+}
 export type IdentityEventsSortingKey = { 'Created' : null };
 export interface InitContractArgs {
   'certificate' : SignedContractCertificate,
@@ -538,6 +572,10 @@ export interface NeuronInformationExtended {
   'dissolve_delay_seconds' : bigint,
   'state' : number,
   'age_seconds' : bigint,
+}
+export interface NnsHolderAssets {
+  'controlled_neurons' : [] | [Timestamped_1],
+  'accounts' : [] | [Timestamped_3],
 }
 export type ObtainDelegationEvent = { 'RetryPrepareDelegation' : null } |
   { 'DelegationGot' : { 'delegation_data' : DelegationData } } |

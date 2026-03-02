@@ -1,5 +1,5 @@
 export const idlFactory = ({ IDL }) => {
-  const FetchAssetsState = IDL.Rec();
+  const FetchNnsAssetsState = IDL.Rec();
   const HoldingState = IDL.Rec();
   const ContractCertificate = IDL.Record({
     'deployer' : IDL.Principal,
@@ -83,9 +83,17 @@ export const idlFactory = ({ IDL }) => {
     'value' : IDL.Opt(AccountsInformation),
     'timestamp' : IDL.Nat64,
   });
-  const HolderAssets = IDL.Record({
+  const NnsHolderAssets = IDL.Record({
     'controlled_neurons' : IDL.Opt(Timestamped_1),
     'accounts' : IDL.Opt(Timestamped_3),
+  });
+  const IdentityAccountNnsAssets = IDL.Record({
+    'identity_account_number' : IDL.Opt(IDL.Nat64),
+    'principal' : IDL.Opt(IDL.Principal),
+    'assets' : IDL.Opt(NnsHolderAssets),
+  });
+  const HolderAssets = IDL.Record({
+    'nns_assets' : IDL.Opt(IDL.Vec(IdentityAccountNnsAssets)),
   });
   const Timestamped_4 = IDL.Record({
     'value' : HolderAssets,
@@ -230,7 +238,7 @@ export const idlFactory = ({ IDL }) => {
     'CheckAccountsForNoApprovePrepare' : IDL.Null,
     'FinishCheckAssets' : IDL.Null,
     'CheckAccountsForNoApproveSequential' : IDL.Record({
-      'sub_accounts' : IDL.Vec(IDL.Vec(IDL.Nat8)),
+      'sub_accounts' : IDL.Vec(IDL.Tuple(IDL.Principal, IDL.Vec(IDL.Nat8))),
     }),
     'StartCheckAssets' : IDL.Null,
   });
@@ -272,34 +280,53 @@ export const idlFactory = ({ IDL }) => {
     'canister_id' : IDL.Principal,
   });
   const DelegationState = IDL.Variant({
-    'NeedPrepareDelegation' : IDL.Record({ 'hostname' : IDL.Text }),
+    'NeedPrepareDelegation' : IDL.Record({
+      'identity_account_number' : IDL.Opt(IDL.Nat64),
+      'hostname' : IDL.Text,
+    }),
     'GetDelegationWaiting' : IDL.Record({
       'delegation_data' : DelegationData,
       'get_delegation_request' : QueryCanisterSignedRequest,
     }),
   });
-  const FetchNnsAssetsState = IDL.Variant({
-    'GetNeuronsIds' : IDL.Null,
-    'GetNeuronsInformation' : IDL.Record({
-      'neuron_hotkeys' : IDL.Vec(IDL.Tuple(IDL.Nat64, IDL.Vec(IDL.Principal))),
-    }),
-    'DeletingNeuronsHotkeys' : IDL.Record({
-      'neuron_hotkeys' : IDL.Vec(IDL.Tuple(IDL.Nat64, IDL.Vec(IDL.Principal))),
-    }),
-    'GetAccountsInformation' : IDL.Null,
-    'GetAccountsBalances' : IDL.Null,
-  });
-  FetchAssetsState.fill(
+  FetchNnsAssetsState.fill(
     IDL.Variant({
-      'FinishFetchAssets' : IDL.Null,
+      'GetNeuronsIds' : IDL.Null,
+      'GetNeuronsInformation' : IDL.Record({
+        'neuron_hotkeys' : IDL.Vec(
+          IDL.Tuple(IDL.Nat64, IDL.Vec(IDL.Principal))
+        ),
+      }),
+      'DeletingNeuronsHotkeys' : IDL.Record({
+        'neuron_hotkeys' : IDL.Vec(
+          IDL.Tuple(IDL.Nat64, IDL.Vec(IDL.Principal))
+        ),
+      }),
       'ObtainDelegationState' : IDL.Record({
         'sub_state' : DelegationState,
-        'wrap_fetch_state' : FetchAssetsState,
+        'wrap_fetch_state' : FetchNnsAssetsState,
       }),
-      'FetchNnsAssetsState' : IDL.Record({ 'sub_state' : FetchNnsAssetsState }),
-      'StartFetchAssets' : IDL.Null,
+      'GetAccountsInformation' : IDL.Null,
+      'GetAccountsBalances' : IDL.Null,
     })
   );
+  const FetchIdentityAccountsNnsAssetsState = IDL.Variant({
+    'FinishCurrentNnsAccountFetch' : IDL.Record({
+      'identity_account_number' : IDL.Opt(IDL.Nat64),
+    }),
+    'GetIdentityAccounts' : IDL.Null,
+    'FetchNnsAssetsState' : IDL.Record({
+      'identity_account_number' : IDL.Opt(IDL.Nat64),
+      'sub_state' : FetchNnsAssetsState,
+    }),
+  });
+  const FetchAssetsState = IDL.Variant({
+    'FetchIdentityAccountsNnsAssetsState' : IDL.Record({
+      'sub_state' : FetchIdentityAccountsNnsAssetsState,
+    }),
+    'FinishFetchAssets' : IDL.Null,
+    'StartFetchAssets' : IDL.Null,
+  });
   HoldingState.fill(
     IDL.Variant({
       'CheckAssets' : IDL.Record({
@@ -669,7 +696,7 @@ export const idlFactory = ({ IDL }) => {
     'AccountHasApprove' : IDL.Record({ 'sub_account' : IDL.Vec(IDL.Nat8) }),
     'CheckAssetsStarted' : IDL.Null,
     'CheckAccountsPrepared' : IDL.Record({
-      'sub_accounts' : IDL.Vec(IDL.Vec(IDL.Nat8)),
+      'sub_accounts' : IDL.Vec(IDL.Tuple(IDL.Principal, IDL.Vec(IDL.Nat8))),
     }),
   });
   const ObtainDelegationEvent = IDL.Variant({
@@ -690,12 +717,19 @@ export const idlFactory = ({ IDL }) => {
     'NeuronsInformationGotEmpty' : IDL.Record({
       'neuron_ids' : IDL.Vec(IDL.Nat64),
     }),
+    'IdentityAccountsGot' : IDL.Record({
+      'account_numbers' : IDL.Vec(IDL.Opt(IDL.Nat64)),
+      'hostname' : IDL.Text,
+    }),
     'NeuronsIdsGot' : IDL.Record({ 'neuron_ids' : IDL.Vec(IDL.Nat64) }),
     'AccountsBalancesObtained' : IDL.Null,
     'NeuronHotkeyDeleted' : IDL.Record({
       'hot_key' : IDL.Principal,
       'failed' : IDL.Opt(IDL.Text),
       'neuron_id' : IDL.Nat64,
+    }),
+    'NnsAssetsForAccountFetched' : IDL.Record({
+      'identity_account_number' : IDL.Opt(IDL.Nat64),
     }),
     'TooManyNeurons' : IDL.Null,
     'ObtainDelegation' : IDL.Record({ 'event' : ObtainDelegationEvent }),
