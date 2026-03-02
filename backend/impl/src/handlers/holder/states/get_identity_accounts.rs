@@ -1,8 +1,12 @@
 use common_canister_impl::components::identity::api::GetAccountsError;
 use common_canister_impl::handlers::build_ic_agent_request;
 use contract_canister_api::types::holder::{
-    FetchAssetsEvent, HolderProcessingError, HolderProcessingEvent, HoldingProcessingEvent,
+    FetchAssetsEvent,
+    HolderProcessingError,
+    HolderProcessingEvent,
+    HoldingProcessingEvent,
     IdentityAccountNumber,
+    // Note: account_name comes from AccountInfo.name in the II response
 };
 
 use crate::components::Environment;
@@ -45,31 +49,31 @@ pub(crate) async fn process(
         .decode_get_accounts_response(&response_data)
         .map_err(to_internal_error)?;
 
-    let account_numbers: Vec<Option<IdentityAccountNumber>> = match get_accounts_result {
+    let accounts: Vec<(Option<IdentityAccountNumber>, Option<String>)> = match get_accounts_result {
         Ok(response) => {
             // Build list: default account (None) + all named accounts (Some(n))
             // The default account has account_number == None in AccountInfo.
             // We include all accounts from the response.
-            let mut numbers: Vec<Option<IdentityAccountNumber>> = response
+            let mut accounts: Vec<(Option<IdentityAccountNumber>, Option<String>)> = response
                 .accounts
                 .iter()
-                .map(|info| info.account_number)
+                .map(|info| (info.account_number, info.name.clone()))
                 .collect();
 
             // Ensure default account (None) is present — it should always be in the list,
             // but if the response doesn't include it explicitly, add it at the front.
-            if !numbers.iter().any(|n| n.is_none()) {
-                numbers.insert(0, None);
+            if !accounts.iter().any(|(n, _)| n.is_none()) {
+                accounts.insert(0, (None, None));
             }
 
             log_info!(
                 env,
                 "Identity accounts: found {} accounts: {:?}",
-                numbers.len(),
-                numbers
+                accounts.len(),
+                accounts.iter().map(|(n, _)| n).collect::<Vec<_>>()
             );
 
-            numbers
+            accounts
         }
         Err(error) => match error {
             GetAccountsError::NoAccounts => {
@@ -78,7 +82,7 @@ pub(crate) async fn process(
                     env,
                     "Identity accounts: no NNS accounts found, using default account only."
                 );
-                vec![None]
+                vec![(None, None)]
             }
             GetAccountsError::NoSuchAnchor => {
                 return Err(HolderProcessingError::InternalError {
@@ -103,10 +107,7 @@ pub(crate) async fn process(
         lock,
         HolderProcessingEvent::Holding {
             event: HoldingProcessingEvent::FetchAssets {
-                event: FetchAssetsEvent::IdentityAccountsGot {
-                    hostname,
-                    account_numbers,
-                },
+                event: FetchAssetsEvent::IdentityAccountsGot { hostname, accounts },
             },
         },
     )?;

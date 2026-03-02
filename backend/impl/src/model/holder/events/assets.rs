@@ -181,10 +181,7 @@ pub(crate) fn handle_fetch_assets_event(
 
         FetchAssetsEvent::ObtainDelegation { event } => handle_delegation_event(model, time, event),
 
-        FetchAssetsEvent::IdentityAccountsGot {
-            hostname,
-            account_numbers,
-        } => {
+        FetchAssetsEvent::IdentityAccountsGot { hostname, accounts } => {
             let wrap_holding_state = assets_state_matches!(
                 model,
                 FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
@@ -193,10 +190,11 @@ pub(crate) fn handle_fetch_assets_event(
             );
 
             // Initialize slots for each identity account
-            let slots: Vec<IdentityAccountNnsAssets> = account_numbers
+            let slots: Vec<IdentityAccountNnsAssets> = accounts
                 .iter()
-                .map(|&account_number| IdentityAccountNnsAssets {
-                    identity_account_number: account_number,
+                .map(|(account_number, account_name)| IdentityAccountNnsAssets {
+                    identity_account_number: *account_number,
+                    account_name: account_name.clone(),
                     principal: None,
                     assets: None,
                 })
@@ -206,7 +204,7 @@ pub(crate) fn handle_fetch_assets_event(
             model.fetching_nns_assets = None;
 
             // Transition to first account or finish if no accounts
-            if let Some(first_account_number) = account_numbers.first().copied() {
+            if let Some(first_account_number) = accounts.first().map(|(n, _)| *n) {
                 set_identity_accounts_sub_state(
                     model,
                     time,

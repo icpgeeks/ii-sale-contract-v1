@@ -329,6 +329,53 @@ async fn test_fetch_assets_multiple_accounts() {
             nns_assets[0].principal, nns_assets[1].principal,
             "accounts should have different principals (different delegation keys)"
         );
+        assert_eq!(
+            nns_assets[0].account_name, None,
+            "default account should have no name"
+        );
+        assert_eq!(
+            nns_assets[1].account_name,
+            Some("Account 1".to_string()),
+            "named account should carry the name from the II response"
+        );
+    });
+}
+
+// ---------------------------------------------------------------------------
+// test_account_name_single_account — default (NoAccounts) path has no name
+// ---------------------------------------------------------------------------
+
+/// Verifies that when II returns NoAccounts (single default account path),
+/// the stored slot has account_name == None.
+#[tokio::test]
+async fn test_account_name_single_account() {
+    drive_to_hold(
+        HT_STANDARD_CERT_EXPIRATION,
+        ht_get_test_deployer(),
+        HT_CAPTURED_IDENTITY_NUMBER,
+        &FetchConfig::single_no_neurons(),
+    )
+    .await;
+
+    get_holder_model(|_, model| {
+        let nns_assets = model
+            .assets
+            .as_ref()
+            .expect("assets should be saved")
+            .value
+            .nns_assets
+            .as_ref()
+            .expect("nns_assets should be present");
+
+        assert_eq!(nns_assets.len(), 1, "should have 1 identity account slot");
+        assert_eq!(
+            nns_assets[0].identity_account_number, None,
+            "single slot is the default account"
+        );
+        assert_eq!(
+            nns_assets[0].account_name, None,
+            "default account from NoAccounts path should have no name"
+        );
     });
 }
 

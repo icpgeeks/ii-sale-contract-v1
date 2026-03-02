@@ -353,7 +353,11 @@ fn build_accounts_response(accounts: &[AccountFetchConfig]) -> GetAccountsRespon
             account_number: if i == 0 { None } else { Some(i as u64) },
             origin: "nns.ic0.app".to_string(),
             last_used: None,
-            name: None,
+            name: if i == 0 {
+                None
+            } else {
+                Some(format!("Account {i}"))
+            },
         })
         .collect();
     GetAccountsResponse {

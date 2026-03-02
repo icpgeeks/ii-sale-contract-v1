@@ -385,7 +385,7 @@ pub enum FetchAssetsEvent {
     },
     IdentityAccountsGot {
         hostname: String,
-        account_numbers: Vec<Option<IdentityAccountNumber>>,
+        accounts: Vec<(Option<IdentityAccountNumber>, Option<String>)>,
     },
     NeuronsIdsGot {
         neuron_ids: Vec<NeuronId>,
@@ -726,6 +726,7 @@ pub struct NnsHolderAssets {
 #[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 pub struct IdentityAccountNnsAssets {
     pub identity_account_number: Option<IdentityAccountNumber>,
+    pub account_name: Option<String>,
     pub principal: Option<Principal>,
     pub assets: Option<NnsHolderAssets>,
 }
