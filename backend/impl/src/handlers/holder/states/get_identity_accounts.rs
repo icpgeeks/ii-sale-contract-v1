@@ -83,27 +83,27 @@ fn build_accounts_list(
     response: Vec<AccountInfo>,
 ) -> Vec<(Option<IdentityAccountNumber>, Option<String>)> {
     if response.is_empty() {
-        // No accounts registered for this origin — use default account only
+        // II returns an empty list only when the origin has never been used at all.
+        // In that case the synthetic account (account_number == None) is the one and
+        // only account that exists for this (anchor, origin) pair.
         log_info!(
             env,
-            "Identity accounts: no NNS accounts found, using default account only."
+            "Identity accounts: no NNS accounts found, using default synthetic account only."
         );
         return vec![(None, None)];
     }
 
-    // Build list: default account (None) + all named accounts (Some(n))
-    // The default account has account_number == None in AccountInfo.
-    // We include all accounts from the response.
-    let mut accounts: Vec<(Option<IdentityAccountNumber>, Option<String>)> = response
+    // II always includes the synthetic account (account_number == None) as the first
+    // element when it is still the default. If the user has renamed the default account
+    // it becomes a numbered account (Some(n)) and the synthetic entry is no longer
+    // returned — the numbered account takes its place as the principal for that slot.
+    // We trust the response exactly as returned and do NOT inject a synthetic (None)
+    // entry ourselves, because doing so would create a ghost slot pointing to a
+    // different principal than the actual default account.
+    let accounts: Vec<(Option<IdentityAccountNumber>, Option<String>)> = response
         .iter()
         .map(|info| (info.account_number, info.name.clone()))
         .collect();
-
-    // Ensure default account (None) is present — it should always be in the list,
-    // but if the response doesn't include it explicitly, add it at the front.
-    if !accounts.iter().any(|(n, _)| n.is_none()) {
-        accounts.insert(0, (None, None));
-    }
 
     log_info!(
         env,

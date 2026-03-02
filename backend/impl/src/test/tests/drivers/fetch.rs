@@ -70,6 +70,11 @@ pub struct FetchConfig {
     /// - Single entry  → driver sends an empty list for `GetIdentityAccounts`.
     /// - Multiple entries → driver sends a proper `Vec<AccountInfo>`.
     pub accounts: Vec<AccountFetchConfig>,
+    /// When set, this callback is called instead of the default mock logic to set up
+    /// the `GetIdentityAccounts` response. Use this to simulate cases where II returns
+    /// a non-default shape, e.g. when the default (synthetic) account has been renamed
+    /// and becomes a numbered account.
+    pub accounts_mock_fn: Option<fn()>,
 }
 
 impl FetchConfig {
@@ -83,6 +88,7 @@ impl FetchConfig {
                 neurons_responses: vec![],
                 nns_account: NnsAccountKind::NotFound,
             }],
+            accounts_mock_fn: None,
         }
     }
 
@@ -103,6 +109,24 @@ impl FetchConfig {
                     nns_account: NnsAccountKind::NotFound,
                 },
             ],
+            accounts_mock_fn: None,
+        }
+    }
+
+    /// Single numbered account (account_number == Some(1), name == "Main") with no neurons.
+    ///
+    /// Simulates the case where the user has renamed the default (synthetic) account:
+    /// II no longer returns a `None` entry — the former default is now a numbered account.
+    /// This config verifies that we do NOT inject a synthetic `(None, None)` slot in that case.
+    pub fn single_renamed_default() -> Self {
+        Self {
+            accounts: vec![AccountFetchConfig {
+                delegation_key: TEST_DELEGATION_KEY_1.to_vec(),
+                neuron_ids: vec![],
+                neurons_responses: vec![],
+                nns_account: NnsAccountKind::NotFound,
+            }],
+            accounts_mock_fn: Some(mock_identity_accounts_renamed_default),
         }
     }
 
@@ -127,6 +151,7 @@ impl FetchConfig {
                 neurons_responses,
                 nns_account: NnsAccountKind::NotFound,
             }],
+            accounts_mock_fn: None,
         }
     }
 
@@ -146,6 +171,7 @@ impl FetchConfig {
                 }],
                 nns_account: NnsAccountKind::OkWithTestSubAccounts,
             }],
+            accounts_mock_fn: None,
         }
     }
 }
@@ -345,6 +371,23 @@ async fn drive_nns_account(config: &AccountFetchConfig) {
 
 /// Builds a `Vec<AccountInfo>` from the given account list.
 /// First account → `account_number: None` (default), subsequent → `Some(n)` starting at 1.
+/// Mocks the IC agent response for the renamed-default-account scenario:
+/// II returns a single numbered account (Some(1), "Main") with no synthetic None entry.
+fn mock_identity_accounts_renamed_default() {
+    use crate::test::tests::components::ic_agent::set_test_ic_agent_response;
+    use candid::Encode;
+    use common_canister_impl::components::identity::api::GetAccountsError;
+
+    let accounts = vec![AccountInfo {
+        account_number: Some(1),
+        origin: "nns.ic0.app".to_string(),
+        last_used: None,
+        name: Some("Main".to_string()),
+    }];
+    let m: Result<Vec<AccountInfo>, GetAccountsError> = Ok(accounts);
+    set_test_ic_agent_response(Encode!(&m).unwrap());
+}
+
 fn build_accounts_list(accounts: &[AccountFetchConfig]) -> Vec<AccountInfo> {
     accounts
         .iter()
@@ -375,12 +418,15 @@ pub(crate) async fn drive_to_finish_fetch_assets(config: &FetchConfig) {
     // StartFetchAssets → GetIdentityAccounts
     super::super::tick().await;
 
-    // GetIdentityAccounts: respond based on account count
-    if config.accounts.len() <= 1 {
-        // Single account: send empty list — state machine inserts the default account
+    // GetIdentityAccounts: respond based on config
+    if let Some(mock_fn) = config.accounts_mock_fn {
+        // Caller supplied a custom mock — delegate entirely to it (e.g. renamed default account).
+        mock_fn();
+    } else if config.accounts.len() <= 1 {
+        // Single account: send empty list — state machine uses the default synthetic account.
         mock_identity_accounts_no_accounts();
     } else {
-        // Multiple accounts: send the full list
+        // Multiple accounts: build the list from config and send it.
         mock_identity_accounts_ok(build_accounts_list(&config.accounts));
     }
     super::super::tick().await;

@@ -342,6 +342,52 @@ async fn test_fetch_assets_multiple_accounts() {
 }
 
 // ---------------------------------------------------------------------------
+// test_renamed_default_account_no_synthetic_injection
+// ---------------------------------------------------------------------------
+
+/// When the user renames the default (synthetic) account in II, it becomes a
+/// numbered account (Some(n)) and II no longer returns a None entry.
+/// Verifies that we do NOT inject a ghost synthetic (None, None) slot in that
+/// case — the stored slots must reflect the II response exactly.
+#[tokio::test]
+async fn test_renamed_default_account_no_synthetic_injection() {
+    drive_to_hold(
+        HT_STANDARD_CERT_EXPIRATION,
+        ht_get_test_deployer(),
+        HT_CAPTURED_IDENTITY_NUMBER,
+        &FetchConfig::single_renamed_default(),
+    )
+    .await;
+
+    get_holder_model(|_, model| {
+        let nns_assets = model
+            .assets
+            .as_ref()
+            .expect("assets should be saved")
+            .value
+            .nns_assets
+            .as_ref()
+            .expect("nns_assets should be present");
+
+        assert_eq!(
+            nns_assets.len(),
+            1,
+            "should have exactly 1 slot — no ghost synthetic injected"
+        );
+        assert_eq!(
+            nns_assets[0].identity_account_number,
+            Some(1),
+            "slot should be the renamed numbered account, not a synthetic None"
+        );
+        assert_eq!(
+            nns_assets[0].account_name,
+            Some("Main".to_string()),
+            "slot should carry the name returned by II"
+        );
+    });
+}
+
+// ---------------------------------------------------------------------------
 // test_account_name_single_account — default (NoAccounts) path has no name
 // ---------------------------------------------------------------------------
 
