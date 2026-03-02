@@ -1,6 +1,14 @@
 import type {Principal} from '@dfinity/principal';
 import {fromNullishNullable, isNullish, nonNullish} from '@dfinity/utils';
-import type {HolderInformation, HolderProcessingError, HolderState, QueryCanisterSignedRequest, SaleDeal, Timestamped_5} from 'src/declarations/contract/contract.did';
+import type {
+    FetchIdentityAccountsNnsAssetsState,
+    HolderInformation,
+    HolderProcessingError,
+    HolderState,
+    QueryCanisterSignedRequest,
+    SaleDeal,
+    Timestamped_5
+} from 'src/declarations/contract/contract.did';
 import {sortArrayByValues} from '../../utils/core/array/array';
 import {hasProperty} from '../../utils/core/typescript/typescriptAddons';
 
@@ -24,10 +32,18 @@ export const getHoldingFetchingAssetsObtainDelegationStateGetDelegationWaitingSi
         return undefined;
     }
     const fetchAssetsState = holdingSubState.FetchAssets.fetch_assets_state;
-    if (!hasProperty(fetchAssetsState, 'ObtainDelegationState')) {
+    if (!hasProperty(fetchAssetsState, 'FetchIdentityAccountsNnsAssetsState')) {
         return undefined;
     }
-    const obtainDelegationSubState = fetchAssetsState.ObtainDelegationState.sub_state;
+    const identityAccountsSubState: FetchIdentityAccountsNnsAssetsState = fetchAssetsState.FetchIdentityAccountsNnsAssetsState.sub_state;
+    if (!hasProperty(identityAccountsSubState, 'FetchNnsAssetsState')) {
+        return undefined;
+    }
+    const fetchNnsSubState = identityAccountsSubState.FetchNnsAssetsState.sub_state;
+    if (!hasProperty(fetchNnsSubState, 'ObtainDelegationState')) {
+        return undefined;
+    }
+    const obtainDelegationSubState = fetchNnsSubState.ObtainDelegationState.sub_state;
     if (!hasProperty(obtainDelegationSubState, 'GetDelegationWaiting')) {
         return undefined;
     }
