@@ -1,5 +1,5 @@
 import {CheckCircleOutlined} from '@ant-design/icons';
-import {isNullish} from '@dfinity/utils';
+import {isNullish, nonNullish} from '@dfinity/utils';
 import {Steps, type StepProps} from 'antd';
 import {LoadingIconWithProgress} from 'frontend/src/components/widgets/LoadingIconWithProgress';
 import {useIdentityHolderAssetsContext} from 'frontend/src/context/identityHolder/state/holding/IdentityHolderAssetsProvider';
@@ -8,6 +8,7 @@ import {exhaustiveCheckFailedMessage} from 'frontend/src/context/logger/loggerCo
 import {i18} from 'frontend/src/i18';
 import {useMemo} from 'react';
 import {getCaptureStepProps} from '../../../../capture/common/finalizeCapture/FinalizeCaptureSteps';
+import {FetchNnsAssetsSteps} from './FetchNnsAssetsSteps';
 import {useFetchValidateAssetsDataContext, type HoldingStep} from './FetchValidateAssetsDataProvider';
 
 export const FetchValidateAssetsSteps = () => {
@@ -20,7 +21,15 @@ export const FetchValidateAssetsSteps = () => {
         const holdingStepProps = getHoldingStepProps();
         const items = hasAssets ? holdingStepProps : captureStepProps.concat(holdingStepProps);
         const startIndexFrom = hasAssets ? 0 : captureStepProps.length;
-        return getHoldingStepContextFrom(step, items, startIndexFrom, shouldDisplayValidatingAssetsStep);
+        const ctx = getHoldingStepContextFrom(step, items, startIndexFrom, shouldDisplayValidatingAssetsStep);
+        if (nonNullish(step) && step.type === 'fetchingNnsAssetsForAccount') {
+            const nnsItemIndex = startIndexFrom + 1;
+            ctx.items[nnsItemIndex] = {
+                ...ctx.items[nnsItemIndex],
+                description: <FetchNnsAssetsSteps />
+            };
+        }
+        return ctx;
     }, [step, hasAssets]);
 
     if (isNullish(step) || step.type == 'n/a') {
@@ -37,10 +46,8 @@ type StepContext = {
 
 export const getHoldingStepProps = (): Array<StepProps> => {
     return [
-        {title: i18.holder.state.holding.fetchingAssets.connectingToNNS, status: undefined},
-        {title: i18.holder.state.holding.fetchingAssets.fetchingNeurons.simple, status: undefined},
-        {title: i18.holder.state.holding.fetchingAssets.removingHotkeys.simple, status: undefined},
-        {title: i18.holder.state.holding.fetchingAssets.fetchingAccounts.simple, status: undefined},
+        {title: i18.holder.state.holding.fetchingAssets.fetchingIdentityAccounts, status: undefined},
+        {title: i18.holder.state.holding.fetchingAssets.fetchingNnsAssets.simple, status: undefined},
         {title: i18.holder.state.holding.fetchingAssets.checkingForUnspentAllowances.simple, status: undefined}
     ];
 };
@@ -62,74 +69,29 @@ const getHoldingStepContextFrom = (step: HoldingStep | undefined, items: Array<S
         items[current].icon = <LoadingIconWithProgress />;
     } else {
         switch (step.type) {
-            case 'obtainDelegation': {
+            case 'fetchingIdentityAccounts': {
                 current = getIndex(0);
                 items[current].icon = <LoadingIconWithProgress />;
                 break;
             }
-            case 'neuronIds': {
+            case 'fetchingNnsAssetsForAccount': {
                 current = getIndex(1);
-                items[current].icon = <LoadingIconWithProgress />;
-                break;
-            }
-            case 'neurons': {
-                current = getIndex(1);
-
-                if (step.neuronsLeft > 0) {
-                    items[current].title = (
-                        <div>
-                            <span>{i18.holder.state.holding.fetchingAssets.fetchingNeurons.simple}</span>{' '}
-                            <span className="gf-font-size-small">{i18.holder.state.holding.fetchingAssets.fetchingNeurons.detailed(step.neuronsLeft)}</span>
-                        </div>
-                    );
-                }
-
-                items[current].icon = <LoadingIconWithProgress />;
-                break;
-            }
-            case 'deletingNeuronHotkeys': {
-                current = getIndex(2);
-
-                if (step.hotkeysLeft > 0) {
-                    items[current].title = (
-                        <div>
-                            <span>{i18.holder.state.holding.fetchingAssets.removingHotkeys.simple}</span>{' '}
-                            <span className="gf-font-size-small">{i18.holder.state.holding.fetchingAssets.removingHotkeys.detailed(step.hotkeysLeft)}</span>
-                        </div>
-                    );
-                }
-
-                items[current].icon = <LoadingIconWithProgress />;
-                break;
-            }
-            case 'accounts': {
-                current = getIndex(3);
-                items[current].icon = <LoadingIconWithProgress />;
-                break;
-            }
-            case 'accountBalances': {
-                current = getIndex(3);
-
-                if (step.accountsLeft > 0) {
-                    items[current].title = (
-                        <div>
-                            <span>{i18.holder.state.holding.fetchingAssets.fetchingAccounts.simple}</span>{' '}
-                            <span className="gf-font-size-small">{i18.holder.state.holding.fetchingAssets.fetchingAccounts.detailed(step.accountsLeft)}</span>
-                        </div>
-                    );
-                }
-
+                items[current].title = (
+                    <div>
+                        <span>{i18.holder.state.holding.fetchingAssets.fetchingNnsAssets.simple}</span>{' '}
+                        <span className="gf-font-size-small">{i18.holder.state.holding.fetchingAssets.fetchingNnsAssets.detailed(step.currentAccountIndex, step.totalAccounts)}</span>
+                    </div>
+                );
                 items[current].icon = <LoadingIconWithProgress />;
                 break;
             }
             case 'assetsFetchedButNotChecked': {
-                current = getIndex(4);
+                current = getIndex(2);
                 items[current].icon = <LoadingIconWithProgress />;
                 break;
             }
             case 'checkAccountApproves': {
-                current = getIndex(4);
-
+                current = getIndex(2);
                 if (step.accountsLeft > 0) {
                     items[current].title = (
                         <div>
@@ -138,13 +100,12 @@ const getHoldingStepContextFrom = (step: HoldingStep | undefined, items: Array<S
                         </div>
                     );
                 }
-
                 items[current].icon = <LoadingIconWithProgress />;
                 break;
             }
             case 'validatingAssets': {
                 if (shouldDisplayValidatingAssetsStep) {
-                    current = getIndex(5);
+                    current = getIndex(3);
                     items[current].icon = <LoadingIconWithProgress />;
                 }
                 break;

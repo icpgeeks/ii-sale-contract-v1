@@ -6,34 +6,58 @@ import {exhaustiveCheckFailedMessage} from 'frontend/src/context/logger/loggerCo
 import {isNonEmptyArray} from 'frontend/src/utils/core/array/array';
 import {getSingleEntryUnion} from 'frontend/src/utils/core/typescript/typescriptAddons';
 import {createContext, useContext, useMemo, type PropsWithChildren} from 'react';
-import type {AccountsInformation, CheckAssetsState, FetchAssetsState, FetchNnsAssetsState, HolderAssets, HoldingState, NeuronAsset} from 'src/declarations/contract/contract.did';
+import type {
+    AccountsInformation,
+    CheckAssetsState,
+    FetchAssetsState,
+    FetchIdentityAccountsNnsAssetsState,
+    FetchNnsAssetsState,
+    HolderAssets,
+    HoldingState,
+    NeuronAsset
+} from 'src/declarations/contract/contract.did';
 
-type HoldingStepType =
-    | 'obtainDelegation'
-    | 'neuronIds'
-    | 'neurons'
-    | 'deletingNeuronHotkeys'
-    | 'accounts'
-    | 'accountBalances'
-    | 'assetsFetchedButNotChecked'
-    | 'checkAccountApproves'
-    | 'validatingAssets'
-    | 'n/a';
+// ─── Inner level (NNS sub-steps for one identity account slot) ───────────────
+
+type NnsAssetsStepType = 'obtainDelegation' | 'neuronIds' | 'neurons' | 'deletingNeuronHotkeys' | 'accounts' | 'accountBalances' | 'n/a';
+
+type NnsAssetsStepProto<T extends NnsAssetsStepType> = {
+    type: T;
+};
+
+type NnsAssetsStepNeurons = NnsAssetsStepProto<'neurons'> & {
+    neuronsLeft: number;
+};
+
+type NnsAssetsStepDeletingNeuronHotkeys = NnsAssetsStepProto<'deletingNeuronHotkeys'> & {
+    hotkeysLeft: number;
+};
+
+type NnsAssetsStepAccountBalances = NnsAssetsStepProto<'accountBalances'> & {
+    accountsLeft: number;
+};
+
+export type NnsAssetsStep =
+    | NnsAssetsStepProto<'obtainDelegation'>
+    | NnsAssetsStepProto<'neuronIds'>
+    | NnsAssetsStepNeurons
+    | NnsAssetsStepDeletingNeuronHotkeys
+    | NnsAssetsStepProto<'accounts'>
+    | NnsAssetsStepAccountBalances
+    | NnsAssetsStepProto<'n/a'>;
+
+// ─── Outer level (top-level holding flow steps) ───────────────────────────────
+
+type HoldingStepType = 'fetchingIdentityAccounts' | 'fetchingNnsAssetsForAccount' | 'assetsFetchedButNotChecked' | 'checkAccountApproves' | 'validatingAssets' | 'n/a';
 
 type HoldingStepProto<T extends HoldingStepType> = {
     type: T;
 };
 
-type HoldingStepNeurons = HoldingStepProto<'neurons'> & {
-    neuronsLeft: number;
-};
-
-type HoldingStepDeletingNeuronHotkeys = HoldingStepProto<'deletingNeuronHotkeys'> & {
-    hotkeysLeft: number;
-};
-
-type HoldingStepAccountBalances = HoldingStepProto<'accountBalances'> & {
-    accountsLeft: number;
+type HoldingStepFetchingNnsAssetsForAccount = HoldingStepProto<'fetchingNnsAssetsForAccount'> & {
+    currentAccountIndex: number;
+    totalAccounts: number;
+    innerStep: NnsAssetsStep;
 };
 
 type HoldingStepCheckAccountApproves = HoldingStepProto<'checkAccountApproves'> & {
@@ -41,12 +65,8 @@ type HoldingStepCheckAccountApproves = HoldingStepProto<'checkAccountApproves'> 
 };
 
 export type HoldingStep =
-    | HoldingStepProto<'obtainDelegation'>
-    | HoldingStepProto<'neuronIds'>
-    | HoldingStepNeurons
-    | HoldingStepDeletingNeuronHotkeys
-    | HoldingStepProto<'accounts'>
-    | HoldingStepAccountBalances
+    | HoldingStepProto<'fetchingIdentityAccounts'>
+    | HoldingStepFetchingNnsAssetsForAccount
     | HoldingStepProto<'assetsFetchedButNotChecked'>
     | HoldingStepCheckAccountApproves
     | HoldingStepProto<'validatingAssets'>
@@ -150,14 +170,11 @@ const getStepFromFetchAssetsState = (state: FetchAssetsState, fetchingAssets: Ho
     }
     const type = union.type;
     switch (type) {
-        case 'ObtainDelegationState': {
-            return {type: 'obtainDelegation'};
-        }
         case 'StartFetchAssets': {
-            return {type: 'obtainDelegation'};
+            return {type: 'fetchingIdentityAccounts'};
         }
-        case 'FetchNnsAssetsState': {
-            return getStepFromNNS(union.state.sub_state, fetchingAssets);
+        case 'FetchIdentityAccountsNnsAssetsState': {
+            return getStepFromFetchIdentityAccountsState(union.state.sub_state, fetchingAssets);
         }
         case 'FinishFetchAssets': {
             return {type: 'assetsFetchedButNotChecked'};
@@ -170,7 +187,7 @@ const getStepFromFetchAssetsState = (state: FetchAssetsState, fetchingAssets: Ho
     }
 };
 
-const getStepFromNNS = (state: FetchNnsAssetsState, fetchingAssets: HolderAssets | undefined): HoldingStep => {
+const getStepFromFetchIdentityAccountsState = (state: FetchIdentityAccountsNnsAssetsState, fetchingAssets: HolderAssets | undefined): HoldingStep => {
     const defaultResult: HoldingStep = {type: 'n/a'};
     const union = getSingleEntryUnion(state);
     if (isNullish(union)) {
@@ -178,21 +195,20 @@ const getStepFromNNS = (state: FetchNnsAssetsState, fetchingAssets: HolderAssets
     }
     const type = union.type;
     switch (type) {
-        case 'GetNeuronsIds': {
-            return {type: 'neuronIds'};
+        case 'GetIdentityAccounts': {
+            return {type: 'fetchingIdentityAccounts'};
         }
-        case 'GetNeuronsInformation': {
-            return getHoldingStepNeurons(fetchingAssets);
+        case 'FetchNnsAssetsState': {
+            const slots = nonNullish(fetchingAssets) ? (fromNullable(fetchingAssets.nns_assets) ?? []) : [];
+            const totalAccounts = slots.length;
+            const completedCount = slots.filter((slot) => nonNullish(fromNullishNullable(slot.assets))).length;
+            const currentAccountIndex = completedCount + 1;
+            const slotIndex = completedCount;
+            const innerStep = getStepFromNNS(union.state.sub_state, fetchingAssets, slotIndex);
+            return {type: 'fetchingNnsAssetsForAccount', currentAccountIndex, totalAccounts, innerStep};
         }
-        case 'DeletingNeuronsHotkeys': {
-            const hotkeysLeft = union.state.neuron_hotkeys.map((v) => v[1].length).reduce((v, acc) => v + acc, 0);
-            return {type: 'deletingNeuronHotkeys', hotkeysLeft};
-        }
-        case 'GetAccountsInformation': {
-            return {type: 'accounts'};
-        }
-        case 'GetAccountsBalances': {
-            return getHoldingStepAccountBalances(fetchingAssets);
+        case 'FinishCurrentNnsAccountFetch': {
+            return {type: 'assetsFetchedButNotChecked'};
         }
         default: {
             const exhaustiveCheck: never = type;
@@ -202,33 +218,76 @@ const getStepFromNNS = (state: FetchNnsAssetsState, fetchingAssets: HolderAssets
     }
 };
 
-const getHoldingStepNeurons = (fetchingAssets: HolderAssets | undefined): HoldingStepNeurons => {
-    const result: HoldingStepNeurons = {type: 'neurons', neuronsLeft: 0};
+const getStepFromNNS = (state: FetchNnsAssetsState, fetchingAssets: HolderAssets | undefined, slotIndex: number): NnsAssetsStep => {
+    const defaultResult: NnsAssetsStep = {type: 'n/a'};
+    const union = getSingleEntryUnion(state);
+    if (isNullish(union)) {
+        return defaultResult;
+    }
+    const type = union.type;
+    switch (type) {
+        case 'ObtainDelegationState': {
+            return {type: 'obtainDelegation'};
+        }
+        case 'GetNeuronsIds': {
+            return {type: 'neuronIds'};
+        }
+        case 'GetNeuronsInformation': {
+            return getHoldingStepNeurons(fetchingAssets, slotIndex);
+        }
+        case 'DeletingNeuronsHotkeys': {
+            const hotkeysLeft = union.state.neuron_hotkeys.map((v) => v[1].length).reduce((v, acc) => v + acc, 0);
+            return {type: 'deletingNeuronHotkeys', hotkeysLeft};
+        }
+        case 'GetAccountsInformation': {
+            return {type: 'accounts'};
+        }
+        case 'GetAccountsBalances': {
+            return getHoldingStepAccountBalances(fetchingAssets, slotIndex);
+        }
+        default: {
+            const exhaustiveCheck: never = type;
+            applicationLogger.error(exhaustiveCheckFailedMessage, exhaustiveCheck);
+            return defaultResult;
+        }
+    }
+};
+
+const getHoldingStepNeurons = (fetchingAssets: HolderAssets | undefined, slotIndex: number): NnsAssetsStepNeurons => {
+    const result: NnsAssetsStepNeurons = {type: 'neurons', neuronsLeft: 0};
     if (nonNullish(fetchingAssets)) {
-        const neuronAssets: Array<NeuronAsset> | undefined = fromNullable(fetchingAssets.controlled_neurons)?.value;
-        if (isNonEmptyArray(neuronAssets)) {
-            const neuronsTotal = neuronAssets.length;
-            const neuronsFound = neuronAssets.filter((asset) => nonNullish(fromNullable(asset.info))).length;
-            result.neuronsLeft = neuronsTotal - neuronsFound;
+        const slot = (fromNullable(fetchingAssets.nns_assets) ?? [])[slotIndex];
+        const slotAssets = nonNullish(slot) ? fromNullishNullable(slot.assets) : undefined;
+        if (nonNullish(slotAssets)) {
+            const neuronAssets: Array<NeuronAsset> = fromNullable(slotAssets.controlled_neurons)?.value ?? [];
+            if (isNonEmptyArray(neuronAssets)) {
+                const neuronsTotal = neuronAssets.length;
+                const neuronsFound = neuronAssets.filter((asset) => nonNullish(fromNullable(asset.info))).length;
+                result.neuronsLeft = neuronsTotal - neuronsFound;
+            }
         }
     }
     return result;
 };
-const getHoldingStepAccountBalances = (fetchingAssets: HolderAssets | undefined): HoldingStepAccountBalances => {
-    const result: HoldingStepAccountBalances = {type: 'accountBalances', accountsLeft: 0};
-    if (nonNullish(fetchingAssets)) {
-        const accountsInformation: AccountsInformation | undefined = fromNullishNullable(fromNullable(fetchingAssets.accounts)?.value);
-        if (nonNullish(accountsInformation)) {
-            const mainAccountInformation = fromNullable(accountsInformation.main_account_information);
-            const hasMainAccountBalance = nonNullish(fromNullishNullable(mainAccountInformation?.balance));
-            if (!hasMainAccountBalance) {
-                result.accountsLeft += 1;
-            }
 
-            const numberOfSubAccountsWithoutBalance = accountsInformation.sub_accounts.filter((subAccount) => {
-                return isNullish(fromNullishNullable(subAccount.sub_account_information.balance));
-            }).length;
-            result.accountsLeft += numberOfSubAccountsWithoutBalance;
+const getHoldingStepAccountBalances = (fetchingAssets: HolderAssets | undefined, slotIndex: number): NnsAssetsStepAccountBalances => {
+    const result: NnsAssetsStepAccountBalances = {type: 'accountBalances', accountsLeft: 0};
+    if (nonNullish(fetchingAssets)) {
+        const slot = (fromNullable(fetchingAssets.nns_assets) ?? [])[slotIndex];
+        const slotAssets = nonNullish(slot) ? fromNullishNullable(slot.assets) : undefined;
+        if (nonNullish(slotAssets)) {
+            const accountsInformation: AccountsInformation | undefined = fromNullishNullable(fromNullable(slotAssets.accounts)?.value);
+            if (nonNullish(accountsInformation)) {
+                const mainAccountInformation = fromNullable(accountsInformation.main_account_information);
+                const hasMainAccountBalance = nonNullish(fromNullishNullable(mainAccountInformation?.balance));
+                if (!hasMainAccountBalance) {
+                    result.accountsLeft += 1;
+                }
+                const numberOfSubAccountsWithoutBalance = accountsInformation.sub_accounts.filter((subAccount) => {
+                    return isNullish(fromNullishNullable(subAccount.sub_account_information.balance));
+                }).length;
+                result.accountsLeft += numberOfSubAccountsWithoutBalance;
+            }
         }
     }
     return result;

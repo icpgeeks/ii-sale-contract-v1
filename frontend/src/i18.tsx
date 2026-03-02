@@ -790,6 +790,11 @@ This description does not cover all possible risks, limitations, or edge cases. 
                     }
                 },
                 fetchingAssets: {
+                    fetchingIdentityAccounts: 'Fetching identity accounts',
+                    fetchingNnsAssets: {
+                        simple: 'Fetching NNS assets',
+                        detailed: (current: number, total: number) => `(account ${current} of ${total})`
+                    },
                     connectingToNNS: 'Connecting to NNS',
                     fetchingNeurons: {
                         simple: 'Fetching neurons',
