@@ -91,6 +91,7 @@ export const idlFactory = ({ IDL }) => {
     'identity_account_number' : IDL.Opt(IDL.Nat64),
     'principal' : IDL.Opt(IDL.Principal),
     'assets' : IDL.Opt(NnsHolderAssets),
+    'account_name' : IDL.Opt(IDL.Text),
   });
   const HolderAssets = IDL.Record({
     'nns_assets' : IDL.Opt(IDL.Vec(IdentityAccountNnsAssets)),
@@ -718,8 +719,8 @@ export const idlFactory = ({ IDL }) => {
       'neuron_ids' : IDL.Vec(IDL.Nat64),
     }),
     'IdentityAccountsGot' : IDL.Record({
-      'account_numbers' : IDL.Vec(IDL.Opt(IDL.Nat64)),
       'hostname' : IDL.Text,
+      'accounts' : IDL.Vec(IDL.Tuple(IDL.Opt(IDL.Nat64), IDL.Opt(IDL.Text))),
     }),
     'NeuronsIdsGot' : IDL.Record({ 'neuron_ids' : IDL.Vec(IDL.Nat64) }),
     'AccountsBalancesObtained' : IDL.Null,

@@ -308,8 +308,8 @@ type FetchAssetsEvent = variant {
   NeuronsInformationObtained;
   NeuronsInformationGotEmpty : record { neuron_ids : vec nat64 };
   IdentityAccountsGot : record {
-    account_numbers : vec opt nat64;
     hostname : text;
+    accounts : vec record { opt nat64; opt text };
   };
   NeuronsIdsGot : record { neuron_ids : vec nat64 };
   AccountsBalancesObtained;
@@ -496,6 +496,7 @@ type IdentityAccountNnsAssets = record {
   identity_account_number : opt nat64;
   "principal" : opt principal;
   assets : opt NnsHolderAssets;
+  account_name : opt text;
 };
 type IdentityEventsSortingKey = variant { Created };
 type InitContractArgs = record {

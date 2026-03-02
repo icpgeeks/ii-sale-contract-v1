@@ -309,8 +309,8 @@ export type FetchAssetsEvent = {
   } |
   {
     'IdentityAccountsGot' : {
-      'account_numbers' : Array<[] | [bigint]>,
       'hostname' : string,
+      'accounts' : Array<[[] | [bigint], [] | [string]]>,
     }
   } |
   { 'NeuronsIdsGot' : { 'neuron_ids' : BigUint64Array | bigint[] } } |
@@ -514,6 +514,7 @@ export interface IdentityAccountNnsAssets {
   'identity_account_number' : [] | [bigint],
   'principal' : [] | [Principal],
   'assets' : [] | [NnsHolderAssets],
+  'account_name' : [] | [string],
 }
 export type IdentityEventsSortingKey = { 'Created' : null };
 export interface InitContractArgs {
