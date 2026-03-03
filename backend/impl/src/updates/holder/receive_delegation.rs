@@ -44,7 +44,9 @@ pub(crate) async fn receive_delegation_int(
     let get_delegation_response = env
         .get_identity()
         .decode_get_account_delegation_response(&get_delegation_response)
-        .unwrap();
+        .map_err(|reason| ReceiveDelegationError::DelegationWrong {
+            reason: format!("decode_get_account_delegation_response: {reason}"),
+        })?;
 
     let signed_delegation = match get_delegation_response {
         Err(AccountDelegationError::NoSuchDelegation) => {
