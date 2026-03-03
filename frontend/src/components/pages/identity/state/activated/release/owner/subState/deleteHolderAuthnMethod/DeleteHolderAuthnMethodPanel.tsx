@@ -16,7 +16,7 @@ import {CaptureStepsRowRaw} from '../../../../capture/common/CaptureStepsRow';
 import {HolderProcessingErrorPanel} from '../../../../common/processingError/HolderProcessingErrorPanel';
 import {ReleasePanelHeader} from '../../../common/ReleasePanelHeader';
 import {ReleaseStepsRowRaw} from '../../../common/ReleaseStepsRow';
-import {Description} from '../checkingAccessFromOwnerAuthnMethod/CheckingAccessFromOwnerAuthnMethodPanel';
+import {Description, MultipleAccountsHint} from '../checkingAccessFromOwnerAuthnMethod/CheckingAccessFromOwnerAuthnMethodPanel';
 import {DangerousToLoseIdentityWarningMessage} from '../dangerousToLoseIdentity/DangerousToLoseIdentityPanel';
 import {IdentityAPIChangedWarningMessage} from '../identityAPIChanged/IdentityAPIChangedPanel';
 
@@ -94,7 +94,8 @@ const EmulateCheckingAccessFromOwnerAuthnMethodPage = () => {
                         </div>
                     }
                 />
-                <InfoAlert message={i18.holder.state.release.checkingAccessFromOwnerAuthnMethod.hint} />
+                <MultipleAccountsHint />
+                <InfoAlert message={i18.holder.state.release.checkingAccessFromOwnerAuthnMethod.multipleAccessMethodsHint} />
                 <AbstractCheckbox checked disabled>
                     {i18.holder.state.release.checkingAccessFromOwnerAuthnMethod.form.agreementCheckbox}
                 </AbstractCheckbox>

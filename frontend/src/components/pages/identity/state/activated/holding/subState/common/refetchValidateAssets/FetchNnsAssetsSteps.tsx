@@ -1,7 +1,8 @@
 import {CheckCircleOutlined} from '@ant-design/icons';
 import {isNullish} from '@dfinity/utils';
-import {Steps, type StepProps} from 'antd';
+import {type StepProps} from 'antd';
 import {LoadingIconWithProgress} from 'frontend/src/components/widgets/LoadingIconWithProgress';
+import {SimpleSteps} from 'frontend/src/components/widgets/SimpleSteps';
 import {applicationLogger} from 'frontend/src/context/logger/logger';
 import {exhaustiveCheckFailedMessage} from 'frontend/src/context/logger/loggerConstants';
 import {i18} from 'frontend/src/i18';
@@ -98,14 +99,55 @@ export const FetchNnsAssetsSteps = () => {
 
     const ctx: NnsStepContext | undefined = useMemo(() => {
         if (isNullish(step) || step.type !== 'fetchingNnsAssetsForAccount') {
-            return undefined;
+            return {current: -1, items: getNnsAssetsStepProps()};
         }
         return getNnsStepContextFrom(step.innerStep);
+    }, [step]);
+
+    const isFullyDoneFetchNnsAssets = useMemo<boolean>(() => {
+        if (isNullish(step)) {
+            return false;
+        }
+        switch (step.type) {
+            case 'fetchingIdentityAccounts':
+            case 'fetchingNnsAssetsForAccount': {
+                return false;
+            }
+            case 'assetsFetchedButNotChecked':
+            case 'checkAccountApproves':
+            case 'validatingAssets': {
+                return true;
+            }
+            case 'n/a': {
+                return false;
+            }
+            default: {
+                const exhaustiveCheck: never = step;
+                applicationLogger.error(exhaustiveCheckFailedMessage, exhaustiveCheck);
+                return false;
+            }
+        }
     }, [step]);
 
     if (isNullish(ctx)) {
         return null;
     }
 
-    return <Steps current={ctx.current} items={ctx.items} labelPlacement="vertical" direction="horizontal" size="small" />;
+    return (
+        <div style={{color: isFullyDoneFetchNnsAssets ? 'var(--ant-color-text)' : undefined}}>
+            <SimpleSteps current={isFullyDoneFetchNnsAssets ? ctx.items.length : ctx.current} items={ctx.items} />
+        </div>
+    );
+};
+
+export const FetchNnsAssetsStepsFake = () => {
+    const ctx: NnsStepContext | undefined = useMemo(() => {
+        return {current: -1, items: getNnsAssetsStepProps()};
+    }, []);
+
+    if (isNullish(ctx)) {
+        return null;
+    }
+
+    return <SimpleSteps current={ctx.current} items={ctx.items} />;
 };

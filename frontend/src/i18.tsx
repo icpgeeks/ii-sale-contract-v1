@@ -790,7 +790,7 @@ This description does not cover all possible risks, limitations, or edge cases. 
                     }
                 },
                 fetchingAssets: {
-                    fetchingIdentityAccounts: 'Fetching identity accounts',
+                    fetchingIdentityAccounts: 'Fetching Internet Identity accounts',
                     fetchingNnsAssets: {
                         simple: 'Fetching NNS assets',
                         detailed: (current: number, total: number) => `(account ${current} of ${total})`
@@ -887,7 +887,12 @@ This description does not cover all possible risks, limitations, or edge cases. 
                     warning:
                         'After you click Confirm, this contract will be removed from your Internet Identity passkey list. If you confirm without access to your Internet Identity, you will permanently lose it.',
                     warningUndone: 'THIS CANNOT BE UNDONE!',
-                    hint: 'Consider creating multiple access methods to secure this Internet Identity before confirming.',
+                    multipleAccessMethodsHint: 'Consider creating multiple access methods to secure this Internet Identity before confirming.',
+                    multipleAccountsHint: () => (
+                        <>
+                            This Internet Identity has <b>multiple NNS accounts</b>. Log in with each account to view all assets before confirming.
+                        </>
+                    ),
                     form: {
                         agreementCheckbox: 'I confirm that I am able to access this Internet Identity.'
                     }

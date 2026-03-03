@@ -25,7 +25,7 @@ export const FinalizeCaptureSteps = () => {
 
         return {
             current: captureStepContext.current,
-            items: [...captureStepContext.items, ...getHoldingStepProps()]
+            items: [...captureStepContext.items, ...getHoldingStepProps(true)]
         };
     }, [step]);
 

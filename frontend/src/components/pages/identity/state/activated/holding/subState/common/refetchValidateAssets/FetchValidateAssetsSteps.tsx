@@ -1,5 +1,5 @@
 import {CheckCircleOutlined} from '@ant-design/icons';
-import {isNullish, nonNullish} from '@dfinity/utils';
+import {isNullish} from '@dfinity/utils';
 import {Steps, type StepProps} from 'antd';
 import {LoadingIconWithProgress} from 'frontend/src/components/widgets/LoadingIconWithProgress';
 import {useIdentityHolderAssetsContext} from 'frontend/src/context/identityHolder/state/holding/IdentityHolderAssetsProvider';
@@ -8,7 +8,7 @@ import {exhaustiveCheckFailedMessage} from 'frontend/src/context/logger/loggerCo
 import {i18} from 'frontend/src/i18';
 import {useMemo} from 'react';
 import {getCaptureStepProps} from '../../../../capture/common/finalizeCapture/FinalizeCaptureSteps';
-import {FetchNnsAssetsSteps} from './FetchNnsAssetsSteps';
+import {FetchNnsAssetsSteps, FetchNnsAssetsStepsFake} from './FetchNnsAssetsSteps';
 import {useFetchValidateAssetsDataContext, type HoldingStep} from './FetchValidateAssetsDataProvider';
 
 export const FetchValidateAssetsSteps = () => {
@@ -21,15 +21,7 @@ export const FetchValidateAssetsSteps = () => {
         const holdingStepProps = getHoldingStepProps();
         const items = hasAssets ? holdingStepProps : captureStepProps.concat(holdingStepProps);
         const startIndexFrom = hasAssets ? 0 : captureStepProps.length;
-        const ctx = getHoldingStepContextFrom(step, items, startIndexFrom, shouldDisplayValidatingAssetsStep);
-        if (nonNullish(step) && step.type === 'fetchingNnsAssetsForAccount') {
-            const nnsItemIndex = startIndexFrom + 1;
-            ctx.items[nnsItemIndex] = {
-                ...ctx.items[nnsItemIndex],
-                description: <FetchNnsAssetsSteps />
-            };
-        }
-        return ctx;
+        return getHoldingStepContextFrom(step, items, startIndexFrom, shouldDisplayValidatingAssetsStep);
     }, [step, hasAssets]);
 
     if (isNullish(step) || step.type == 'n/a') {
@@ -44,10 +36,10 @@ type StepContext = {
     items: Array<StepProps>;
 };
 
-export const getHoldingStepProps = (): Array<StepProps> => {
+export const getHoldingStepProps = (isFakeNnsAssetsSteps?: boolean): Array<StepProps> => {
     return [
         {title: i18.holder.state.holding.fetchingAssets.fetchingIdentityAccounts, status: undefined},
-        {title: i18.holder.state.holding.fetchingAssets.fetchingNnsAssets.simple, status: undefined},
+        {title: i18.holder.state.holding.fetchingAssets.fetchingNnsAssets.simple, status: undefined, description: isFakeNnsAssetsSteps ? <FetchNnsAssetsStepsFake /> : <FetchNnsAssetsSteps />},
         {title: i18.holder.state.holding.fetchingAssets.checkingForUnspentAllowances.simple, status: undefined}
     ];
 };

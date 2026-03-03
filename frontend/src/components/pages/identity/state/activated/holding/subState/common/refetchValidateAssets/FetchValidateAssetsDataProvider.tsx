@@ -1,5 +1,6 @@
 import {fromNullable, fromNullishNullable, isNullish, nonNullish} from '@dfinity/utils';
 import {useIdentityHolderAssetsContext} from 'frontend/src/context/identityHolder/state/holding/IdentityHolderAssetsProvider';
+import {isSlotFullyFetched} from 'frontend/src/context/identityHolder/state/holding/useIdentityHolderLinkedAssetsValue';
 import {useIdentityHolderStateContext} from 'frontend/src/context/identityHolder/state/IdentityHolderStateProvider';
 import {applicationLogger} from 'frontend/src/context/logger/logger';
 import {exhaustiveCheckFailedMessage} from 'frontend/src/context/logger/loggerConstants';
@@ -57,6 +58,8 @@ type HoldingStepProto<T extends HoldingStepType> = {
 type HoldingStepFetchingNnsAssetsForAccount = HoldingStepProto<'fetchingNnsAssetsForAccount'> & {
     currentAccountIndex: number;
     totalAccounts: number;
+    //TODO check if it is used and remove if not
+    accountsLeft: number;
     innerStep: NnsAssetsStep;
 };
 
@@ -201,11 +204,16 @@ const getStepFromFetchIdentityAccountsState = (state: FetchIdentityAccountsNnsAs
         case 'FetchNnsAssetsState': {
             const slots = nonNullish(fetchingAssets) ? (fromNullable(fetchingAssets.nns_assets) ?? []) : [];
             const totalAccounts = slots.length;
-            const completedCount = slots.filter((slot) => nonNullish(fromNullishNullable(slot.assets))).length;
-            const currentAccountIndex = completedCount + 1;
-            const slotIndex = completedCount;
+            const completedCount = slots.filter(isSlotFullyFetched).length;
+            const accountsLeft = totalAccounts - completedCount;
+            const currentAccountIndex = Math.min(completedCount + 1, totalAccounts);
+            const currentAccNum = fromNullable(union.state.identity_account_number);
+            const foundSlotIndex = nonNullish(currentAccNum)
+                ? slots.findIndex((s) => fromNullable(s.identity_account_number) === currentAccNum)
+                : slots.findIndex((s) => isNullish(fromNullable(s.identity_account_number)));
+            const slotIndex = foundSlotIndex >= 0 ? foundSlotIndex : completedCount;
             const innerStep = getStepFromNNS(union.state.sub_state, fetchingAssets, slotIndex);
-            return {type: 'fetchingNnsAssetsForAccount', currentAccountIndex, totalAccounts, innerStep};
+            return {type: 'fetchingNnsAssetsForAccount', currentAccountIndex, totalAccounts, accountsLeft, innerStep};
         }
         case 'FinishCurrentNnsAccountFetch': {
             return {type: 'assetsFetchedButNotChecked'};
