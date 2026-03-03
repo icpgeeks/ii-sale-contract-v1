@@ -7,7 +7,7 @@ use crate::{
     model::holder::UpdateHolderError,
 };
 
-use common_canister_impl::components::identity::api::{GetDelegationResponse, SignedDelegation};
+use common_canister_impl::components::identity::api::{AccountDelegationError, SignedDelegation};
 #[cfg(network = "local")]
 use common_canister_impl::handlers::ic_agent::{IcAgentRequest, QueryHttpSettings};
 use common_canister_types::TimestampNanos;
@@ -43,14 +43,25 @@ pub(crate) async fn receive_delegation_int(
 
     let get_delegation_response = env
         .get_identity()
-        .decode_get_delegation_response(&get_delegation_response)
+        .decode_get_account_delegation_response(&get_delegation_response)
         .unwrap();
 
     let signed_delegation = match get_delegation_response {
-        GetDelegationResponse::NoSuchDelegation => {
+        Err(AccountDelegationError::NoSuchDelegation) => {
             return Err(ReceiveDelegationError::ResponseNotContainsDelegation);
         }
-        GetDelegationResponse::SignedDelegation(signed_delegation) => signed_delegation,
+        Err(AccountDelegationError::Unauthorized(principal)) => {
+            return Err(ReceiveDelegationError::DelegationWrong {
+                reason: format!(
+                    "get_account_delegation: unauthorized, principal: {}",
+                    principal.to_text()
+                ),
+            });
+        }
+        Err(AccountDelegationError::InternalCanisterError(reason)) => {
+            return Err(ReceiveDelegationError::DelegationWrong { reason });
+        }
+        Ok(signed_delegation) => signed_delegation,
     };
 
     let delegation_data = verify_delegation(env.as_ref(), &signed_delegation)?;

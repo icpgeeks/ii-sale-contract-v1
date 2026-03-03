@@ -8,10 +8,10 @@ use common_canister_impl::{
             AccountInfo, AccountNumber, AuthnMethod, AuthnMethodConfirmRet,
             AuthnMethodConfirmationCode, AuthnMethodData, AuthnMethodRegisterError,
             AuthnMethodRegisterRet, AuthnMethodRegistrationModeEnterRet,
-            AuthnMethodRegistrationModeExitRet, AuthnMethodRemoveRet, GetAccountsError,
-            GetDefaultAccountRet, GetDelegationResponse, IdentityAuthnInfo, IdentityAuthnInfoRet,
-            IdentityInfoRet, OpenidCredentialRemoveRet, PrepareAccountDelegationRet, PublicKey,
-            RegistrationId, UserNumber, WebAuthn,
+            AuthnMethodRegistrationModeExitRet, AuthnMethodRemoveRet, GetAccountDelegationRet,
+            GetAccountsError, GetDefaultAccountRet, GetDelegationResponse, IdentityAuthnInfo,
+            IdentityAuthnInfoRet, IdentityInfoRet, OpenidCredentialRemoveRet,
+            PrepareAccountDelegationRet, PublicKey, RegistrationId, UserNumber, WebAuthn,
         },
         interface::Identity,
         interface_impl::IdentityImpl,
@@ -288,6 +288,31 @@ impl Identity for IdentityTest {
         response_data: &[u8],
     ) -> Result<GetDelegationResponse, String> {
         self.proxy.decode_get_delegation_response(response_data)
+    }
+
+    fn build_get_account_delegation_request(
+        &self,
+        user_number: &UserNumber,
+        frontend_hostname: String,
+        account_number: Option<AccountNumber>,
+        session_key: Vec<u8>,
+        timestamp: TimestampNanos,
+    ) -> CanisterRequest {
+        self.proxy.build_get_account_delegation_request(
+            user_number,
+            frontend_hostname,
+            account_number,
+            session_key,
+            timestamp,
+        )
+    }
+
+    fn decode_get_account_delegation_response(
+        &self,
+        response_data: &[u8],
+    ) -> Result<GetAccountDelegationRet, String> {
+        self.proxy
+            .decode_get_account_delegation_response(response_data)
     }
 
     fn build_get_default_account_request(

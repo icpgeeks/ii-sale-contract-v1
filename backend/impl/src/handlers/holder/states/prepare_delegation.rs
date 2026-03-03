@@ -106,9 +106,10 @@ pub(crate) async fn process(
 
     let get_delegation_request = build_query_request(
         env,
-        env.get_identity().build_get_delegation_request(
+        env.get_identity().build_get_account_delegation_request(
             &identity_number,
             hostname.clone(),
+            identity_account_number,
             device_key,
             delegation_timestamp.into(),
         ),
