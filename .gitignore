@@ -22,6 +22,9 @@
 /target/
 /release/
 
+# generated factory files
+/generated/
+
 # frontend code
 node_modules/
 dist/

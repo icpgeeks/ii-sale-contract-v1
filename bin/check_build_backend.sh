@@ -3,8 +3,8 @@ set -euo pipefail
 
 . ./bin/utils.sh
 
-header "Ensuring factory stubs exist in target/"
-DEV_DIR="./target"
+header "Ensuring factory stubs exist in generated/"
+DEV_DIR="./generated"
 mkdir -p "$DEV_DIR"
 for stub in "$DEV_DIR/factory_local.rs" "$DEV_DIR/factory_test.rs"; do
     if [ ! -f "$stub" ]; then

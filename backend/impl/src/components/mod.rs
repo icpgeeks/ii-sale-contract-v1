@@ -24,11 +24,11 @@ use crate::components::referral::Referral;
 pub mod factory;
 
 #[cfg(network = "local")]
-#[path = "../../../../target/factory_local.rs"]
+#[path = "../../../../generated/factory_local.rs"]
 pub mod factory;
 
 #[cfg(network = "test")]
-#[path = "../../../../target/factory_test.rs"]
+#[path = "../../../../generated/factory_test.rs"]
 pub mod factory;
 
 pub mod referral;

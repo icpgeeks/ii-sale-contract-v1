@@ -43,4 +43,5 @@ WORKDIR /canister
 ENV RELEASE_DIR_PREFIX=target/wasm32-unknown-unknown/release
 ENV RELEASE_FILE_PREFIX=$RELEASE_DIR_PREFIX/${RELEASE_MODULE}_canister_impl
 ARG FRONTEND_BUILD_MODE=production
+ARG RUSTFLAGS=
 RUN bin/build_release_generic.sh
