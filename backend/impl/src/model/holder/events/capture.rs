@@ -1,7 +1,7 @@
 use common_canister_types::{TimestampMillis, Timestamped};
 use contract_canister_api::types::holder::{
     CaptureError, CaptureProcessingEvent, CaptureState, CheckAssetsState, FetchAssetsState,
-    HolderState, HoldingState, ReleaseInitiation, ReleaseState,
+    HolderState, HoldingState, IdentityAccountNumber, ReleaseInitiation, ReleaseState,
 };
 
 use crate::{
@@ -126,7 +126,7 @@ pub(crate) fn handle_capture_event(
                 update_capture_state(
                     model,
                     time,
-                    CaptureState::GetHolderContractPrincipal {
+                    CaptureState::GetHolderContractAccounts {
                         frontend_hostname: frontend_hostname.clone(),
                     },
                 );
@@ -145,11 +145,46 @@ pub(crate) fn handle_capture_event(
             set_capture_fail_state(model, time, error.clone());
             Ok(())
         }
-        CaptureProcessingEvent::HolderContractPrincipalIsHolderOwner => {
+        CaptureProcessingEvent::AccountsForPrincipalCheckGot { accounts_to_check } => {
+            match &model.state.value {
+                HolderState::Capture {
+                    sub_state: CaptureState::GetHolderContractAccounts { frontend_hostname },
+                    ..
+                } => {
+                    let frontend_hostname = frontend_hostname.clone();
+                    let accounts_to_check: Vec<Option<IdentityAccountNumber>> =
+                        accounts_to_check.clone();
+                    update_capture_state(
+                        model,
+                        time,
+                        CaptureState::CheckHolderContractPrincipals {
+                            frontend_hostname,
+                            accounts_to_check,
+                        },
+                    );
+                    Ok(())
+                }
+                _ => Err(UpdateHolderError::WrongState),
+            }
+        }
+        CaptureProcessingEvent::AccountPrincipalChecked { .. } => match &mut model.state.value {
+            HolderState::Capture {
+                sub_state:
+                    CaptureState::CheckHolderContractPrincipals {
+                        accounts_to_check, ..
+                    },
+                ..
+            } => {
+                accounts_to_check.remove(0);
+                Ok(())
+            }
+            _ => Err(UpdateHolderError::WrongState),
+        },
+        CaptureProcessingEvent::HolderContractPrincipalIsHolderOwner { .. } => {
             state_matches!(
                 model,
                 HolderState::Capture {
-                    sub_state: CaptureState::GetHolderContractPrincipal { .. },
+                    sub_state: CaptureState::CheckHolderContractPrincipals { .. },
                     ..
                 }
             );
@@ -162,22 +197,23 @@ pub(crate) fn handle_capture_event(
             );
             Ok(())
         }
-        CaptureProcessingEvent::HolderContractPrincipalObtained { .. } => {
+        CaptureProcessingEvent::HolderContractPrincipalCheckPassed => {
             state_matches!(
                 model,
                 HolderState::Capture {
-                    sub_state: CaptureState::GetHolderContractPrincipal { .. },
+                    sub_state: CaptureState::CheckHolderContractPrincipals { .. },
                     ..
                 }
             );
             update_capture_state(model, time, CaptureState::ObtainingIdentityAuthnMethods);
             Ok(())
         }
-        CaptureProcessingEvent::GetHolderContractPrincipalUnathorized => {
+        CaptureProcessingEvent::GetHolderContractPrincipalUnauthorized => {
             state_matches!(
                 model,
                 HolderState::Capture {
-                    sub_state: CaptureState::GetHolderContractPrincipal { .. },
+                    sub_state: CaptureState::GetHolderContractAccounts { .. }
+                        | CaptureState::CheckHolderContractPrincipals { .. },
                     ..
                 }
             );

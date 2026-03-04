@@ -1,7 +1,7 @@
 use candid::Principal;
 use common_canister_impl::{
     components::identity::api::{
-        AuthnMethod, AuthnMethodData, AuthnMethodProtection, AuthnMethodPurpose,
+        AccountInfo, AuthnMethod, AuthnMethodData, AuthnMethodProtection, AuthnMethodPurpose,
         AuthnMethodRegisterError, AuthnMethodRegistrationModeExitError,
         AuthnMethodSecuritySettings, MetadataMapV2, WebAuthn,
     },
@@ -17,9 +17,11 @@ use contract_canister_api::{
 };
 
 use crate::test::tests::support::mocks::{
+    make_account_info, mock_accounts_for_principal_check, mock_accounts_for_principal_check_empty,
     mock_authn_method_register_err, mock_authn_method_register_ok,
     mock_authn_method_registration_mode_exit_err, mock_authn_method_registration_mode_exit_ok,
-    mock_identity_info_ok, mock_obtain_hub_canister_ok,
+    mock_get_principal_response, mock_identity_info_ok, mock_obtain_hub_canister_ok,
+    mock_prepare_account_delegation_for_check,
 };
 use crate::{
     handlers::holder::states::get_holder_model,
@@ -114,13 +116,15 @@ pub(crate) async fn ht_advance_to_exit_authn_method_registration() {
 // test_holder_auth_registration_fail_dangerous_lost
 // ---------------------------------------------------------------------------
 
-/// When the hub canister returns the deployer principal (not the hub principal), the
-/// state machine detects the mismatch and transitions to `DangerousToLoseIdentity`.
+/// When the default account's principal matches the owner, the state machine detects
+/// the mismatch and transitions to `DangerousToLoseIdentity`.
 #[tokio::test]
 async fn test_holder_auth_registration_fail_dangerous_lost() {
+    let owner = ht_get_test_deployer();
+
     ht_holder_authn_method_registration(
         12 + HT_SALE_DEAL_SAFE_CLOSE_DURATION,
-        ht_get_test_deployer(),
+        owner,
         HT_CAPTURED_IDENTITY_NUMBER,
     )
     .await;
@@ -131,11 +135,101 @@ async fn test_holder_auth_registration_fail_dangerous_lost() {
     mock_authn_method_registration_mode_exit_ok();
     super::tick().await;
     test_state_matches!(HolderState::Capture {
-        sub_state: CaptureState::GetHolderContractPrincipal { frontend_hostname },
+        sub_state: CaptureState::GetHolderContractAccounts { frontend_hostname },
     } if frontend_hostname == TEST_CAPTURE_HOSTNAME);
 
-    // Hub returns the *deployer* principal → dangerous mismatch
-    mock_obtain_hub_canister_ok(ht_get_test_deployer());
+    // get_accounts returns empty → only default account (None) in list
+    mock_accounts_for_principal_check_empty();
+    super::tick().await;
+    test_state_matches!(HolderState::Capture {
+        sub_state: CaptureState::CheckHolderContractPrincipals { frontend_hostname, .. },
+    } if frontend_hostname == TEST_CAPTURE_HOSTNAME);
+
+    // get_principal returns the *owner* principal → dangerous mismatch
+    mock_get_principal_response(owner);
+    super::tick().await;
+    test_state_matches!(HolderState::Release {
+        release_initiation: ReleaseInitiation::DangerousToLoseIdentity,
+        sub_state: ReleaseState::DangerousToLoseIdentity,
+    });
+}
+
+// ---------------------------------------------------------------------------
+// test_holder_auth_registration_fail_dangerous_lost_numbered_account
+// ---------------------------------------------------------------------------
+
+/// When the owner is logged in via a *numbered* account of the captured identity,
+/// the state machine must detect this even though `get_principal` (default account)
+/// would return a different principal.
+/// Verifies the fix for the multi-account safety gap.
+#[tokio::test]
+async fn test_holder_auth_registration_fail_dangerous_lost_numbered_account() {
+    // We need owner == Principal::self_authenticating(some_user_key).
+    // Choose a fixed user_key and derive the owner principal from it so that
+    // the comparison inside process_check_principals will match.
+    let numbered_account_user_key: Vec<u8> = vec![
+        0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
+        0xff, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+        0xee, 0xff, 0x01,
+    ];
+    // The owner principal is exactly what II would return as the principal for
+    // this numbered account: Principal::self_authenticating(&numbered_account_user_key).
+    let owner = Principal::self_authenticating(&numbered_account_user_key);
+
+    // Initialize and activate the contract with our derived owner.
+    // We must also set the caller to `owner` before calling start_capture,
+    // because start_capture checks caller == owner.
+    use crate::test::tests::activate_contract::ht_init_and_activate_contract;
+    ht_init_and_activate_contract(12 + HT_SALE_DEAL_SAFE_CLOSE_DURATION, owner).await;
+    set_test_caller(owner);
+    assert!(
+        crate::updates::holder::start_capture_identity::start_capture_identity_int(
+            HT_CAPTURED_IDENTITY_NUMBER
+        )
+        .await
+        .is_ok(),
+        "start_capture_identity_int failed"
+    );
+    // Two ticks: StartCapture → CreateEcdsaKey → RegisterAuthnMethodSession
+    super::tick().await;
+    super::tick().await;
+    test_state_matches!(HolderState::Capture {
+        sub_state: CaptureState::RegisterAuthnMethodSession,
+    });
+
+    ht_advance_to_exit_authn_method_registration().await;
+    // State: ExitAndRegisterHolderAuthnMethod { TEST_CAPTURE_HOSTNAME }
+
+    mock_authn_method_registration_mode_exit_ok();
+    super::tick().await;
+    test_state_matches!(HolderState::Capture {
+        sub_state: CaptureState::GetHolderContractAccounts { frontend_hostname },
+    } if frontend_hostname == TEST_CAPTURE_HOSTNAME);
+
+    // II returns two accounts: default (None) + numbered account 1 ("Main").
+    // The default account principal (hub canister) does NOT match the owner.
+    // The numbered account 1 principal WILL match (via prepare_account_delegation).
+    let accounts = vec![
+        make_account_info(None, None),
+        make_account_info(Some(1), Some("Main")),
+    ];
+    mock_accounts_for_principal_check(accounts);
+    super::tick().await;
+    test_state_matches!(HolderState::Capture {
+        sub_state: CaptureState::CheckHolderContractPrincipals { frontend_hostname, .. },
+    } if frontend_hostname == TEST_CAPTURE_HOSTNAME);
+
+    // Tick 1: check default account (None) via get_principal → hub canister (safe)
+    mock_get_principal_response(ht_get_test_hub_canister());
+    super::tick().await;
+    // AccountPrincipalChecked consumed None; still in CheckHolderContractPrincipals with [Some(1)]
+    test_state_matches!(HolderState::Capture {
+        sub_state: CaptureState::CheckHolderContractPrincipals { .. },
+    });
+
+    // Tick 2: check numbered account 1 via prepare_account_delegation.
+    // The returned user_key produces Principal::self_authenticating(user_key) == owner → DANGER.
+    mock_prepare_account_delegation_for_check(numbered_account_user_key);
     super::tick().await;
     test_state_matches!(HolderState::Release {
         release_initiation: ReleaseInitiation::DangerousToLoseIdentity,
@@ -164,10 +258,21 @@ async fn test_holder_auth_registration() {
     mock_authn_method_registration_mode_exit_ok();
     super::tick().await;
     test_state_matches!(HolderState::Capture {
-        sub_state: CaptureState::GetHolderContractPrincipal { frontend_hostname },
+        sub_state: CaptureState::GetHolderContractAccounts { frontend_hostname },
     } if frontend_hostname == TEST_CAPTURE_HOSTNAME);
 
-    mock_obtain_hub_canister_ok(ht_get_test_hub_canister());
+    // get_accounts: empty → only default account
+    mock_accounts_for_principal_check_empty();
+    super::tick().await;
+    test_state_matches!(HolderState::Capture {
+        sub_state: CaptureState::CheckHolderContractPrincipals { frontend_hostname, .. },
+    } if frontend_hostname == TEST_CAPTURE_HOSTNAME);
+
+    // get_principal for default account → hub canister (safe, not the owner)
+    mock_get_principal_response(ht_get_test_hub_canister());
+    super::tick().await;
+    // State: CheckHolderContractPrincipals with empty list (AccountPrincipalChecked consumed None)
+    // One more tick: process_check_principals sees empty list → HolderContractPrincipalCheckPassed
     super::tick().await;
     test_state_matches!(HolderState::Capture {
         sub_state: CaptureState::ObtainingIdentityAuthnMethods,
@@ -380,11 +485,20 @@ async fn test_holder_auth_registration_with_expired_confirmation() {
     mock_authn_method_registration_mode_exit_ok();
     super::tick().await;
     test_state_matches!(HolderState::Capture {
-        sub_state: CaptureState::GetHolderContractPrincipal { frontend_hostname },
+        sub_state: CaptureState::GetHolderContractAccounts { frontend_hostname },
     } if frontend_hostname == &hostname);
 
-    mock_obtain_hub_canister_ok(ht_get_test_hub_canister());
-    // Complete the capture process
+    // get_accounts: empty → only default account
+    mock_accounts_for_principal_check_empty();
+    super::tick().await;
+    test_state_matches!(HolderState::Capture {
+        sub_state: CaptureState::CheckHolderContractPrincipals { .. },
+    });
+
+    // get_principal for default account → hub canister (safe)
+    mock_get_principal_response(ht_get_test_hub_canister());
+    super::tick().await;
+    // One more tick: process_check_principals sees empty list → HolderContractPrincipalCheckPassed
     super::tick().await;
     test_state_matches!(HolderState::Capture {
         sub_state: CaptureState::ObtainingIdentityAuthnMethods,
@@ -413,10 +527,20 @@ async fn test_protected_authn_method_deleted() {
     mock_authn_method_registration_mode_exit_ok();
     super::tick().await;
     test_state_matches!(HolderState::Capture {
-        sub_state: CaptureState::GetHolderContractPrincipal { frontend_hostname },
+        sub_state: CaptureState::GetHolderContractAccounts { frontend_hostname },
     } if frontend_hostname == TEST_CAPTURE_HOSTNAME);
 
-    mock_obtain_hub_canister_ok(ht_get_test_hub_canister());
+    // get_accounts: empty → only default account
+    mock_accounts_for_principal_check_empty();
+    super::tick().await;
+    test_state_matches!(HolderState::Capture {
+        sub_state: CaptureState::CheckHolderContractPrincipals { .. },
+    });
+
+    // get_principal for default account → hub canister (safe)
+    mock_get_principal_response(ht_get_test_hub_canister());
+    super::tick().await;
+    // One more tick: process_check_principals sees empty list → HolderContractPrincipalCheckPassed
     super::tick().await;
     test_state_matches!(HolderState::Capture {
         sub_state: CaptureState::ObtainingIdentityAuthnMethods,

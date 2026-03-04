@@ -11,11 +11,60 @@ use common_canister_impl::components::{
     nns::api::ListNeuronsResponse,
     nns_dap::api::{AccountDetails, GetAccountResponse},
 };
+use contract_canister_api::types::holder::IdentityAccountNumber;
 
 use crate::test::tests::components::ic_agent::set_test_ic_agent_response;
 
 // Constants are defined in test/mod.rs and accessible via super
 use super::super::{TEST_DELEGATION_EXPIRATION, TEST_DELEGATION_KEY_1};
+
+// ---------------------------------------------------------------------------
+// Principal-check phase (GetHolderContractAccounts / CheckHolderContractPrincipals)
+// ---------------------------------------------------------------------------
+
+/// Mocks IC agent response for `get_accounts` during the principal-check phase:
+/// returns an empty list (only the synthetic default account exists).
+pub(crate) fn mock_accounts_for_principal_check_empty() {
+    let m: Result<Vec<AccountInfo>, GetAccountsError> = Ok(vec![]);
+    set_test_ic_agent_response(Encode!(&m).unwrap());
+}
+
+/// Mocks IC agent response for `get_accounts` during the principal-check phase:
+/// returns the given list of accounts.
+pub(crate) fn mock_accounts_for_principal_check(accounts: Vec<AccountInfo>) {
+    let m: Result<Vec<AccountInfo>, GetAccountsError> = Ok(accounts);
+    set_test_ic_agent_response(Encode!(&m).unwrap());
+}
+
+/// Mocks IC agent response for `get_principal` (default / synthetic account check):
+/// returns the given principal.
+pub(crate) fn mock_get_principal_response(principal: Principal) {
+    set_test_ic_agent_response(Encode!(&principal).unwrap());
+}
+
+/// Mocks IC agent response for `prepare_account_delegation` during the
+/// principal-check phase (numbered account).  The `user_key` is used to derive
+/// the account principal via `Principal::self_authenticating(user_key)`.
+pub(crate) fn mock_prepare_account_delegation_for_check(user_key: impl Into<Vec<u8>>) {
+    let m: PrepareAccountDelegationRet = Ok(PrepareAccountDelegation {
+        user_key: user_key.into().into(),
+        expiration: TEST_DELEGATION_EXPIRATION,
+    });
+    set_test_ic_agent_response(Encode!(&m).unwrap());
+}
+
+/// Builds an `AccountInfo` for a numbered account to use in principal-check mocks.
+pub(crate) fn make_account_info(
+    account_number: Option<IdentityAccountNumber>,
+    name: Option<&str>,
+) -> AccountInfo {
+    AccountInfo {
+        account_number,
+        origin: "nns.ic0.app".to_string(),
+        last_used: None,
+        name: name.map(|s| s.to_string()),
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Identity accounts

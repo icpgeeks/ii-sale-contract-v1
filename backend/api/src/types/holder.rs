@@ -41,8 +41,12 @@ pub enum CaptureState {
     ExitAndRegisterHolderAuthnMethod {
         frontend_hostname: String,
     },
-    GetHolderContractPrincipal {
+    GetHolderContractAccounts {
         frontend_hostname: String,
+    },
+    CheckHolderContractPrincipals {
+        frontend_hostname: String,
+        accounts_to_check: Vec<Option<IdentityAccountNumber>>,
     },
     NeedDeleteProtectedIdentityAuthnMethod {
         meta_data: Vec<(String, String)>,
@@ -319,11 +323,17 @@ pub enum CaptureProcessingEvent {
     HolderAuthnMethodRegisterError {
         error: CaptureError,
     },
-    HolderContractPrincipalIsHolderOwner,
-    HolderContractPrincipalObtained {
-        holder_contract_principal: Principal,
+    AccountsForPrincipalCheckGot {
+        accounts_to_check: Vec<Option<IdentityAccountNumber>>,
     },
-    GetHolderContractPrincipalUnathorized,
+    AccountPrincipalChecked {
+        account_number: Option<IdentityAccountNumber>,
+    },
+    HolderContractPrincipalIsHolderOwner {
+        account_number: Option<IdentityAccountNumber>,
+    },
+    HolderContractPrincipalCheckPassed,
+    GetHolderContractPrincipalUnauthorized,
     HolderAuthnMethodLost,
     IdentityAPIChangeDetected,
     IdentityAuthnMethodProtected {

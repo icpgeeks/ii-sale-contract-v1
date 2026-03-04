@@ -15,7 +15,8 @@ use crate::{
         components::{ecdsa::PUBLIC_KEY, ic::set_test_caller},
         ht_get_test_deployer, ht_get_test_hub_canister, ht_init_test_contract,
         support::mocks::{
-            mock_authn_method_register_ok, mock_authn_method_registration_mode_exit_ok,
+            mock_accounts_for_principal_check_empty, mock_authn_method_register_ok,
+            mock_authn_method_registration_mode_exit_ok, mock_get_principal_response,
             mock_identity_info_ok, mock_obtain_hub_canister_ok,
         },
         TEST_AUTHN_CONFIRMATION_CODE, TEST_AUTHN_REGISTER_EXPIRATION_NANOS, TEST_CAPTURE_HOSTNAME,
@@ -73,6 +74,21 @@ pub(crate) async fn drive_to_captured(
     // --- Exit authn method registration mode (IC agent call) ---
     mock_authn_method_registration_mode_exit_ok();
     super::super::tick().await;
+    // State: GetHolderContractAccounts
+
+    // --- GetHolderContractAccounts: get_accounts returns empty → only default account ---
+    mock_accounts_for_principal_check_empty();
+    super::super::tick().await;
+    // State: CheckHolderContractPrincipals { accounts_to_check: [None] }
+
+    // --- CheckHolderContractPrincipals: get_principal for default account ---
+    // Returns a principal that does NOT match the owner (safe to proceed).
+    mock_get_principal_response(ht_get_test_hub_canister());
+    super::super::tick().await;
+    // State: CheckHolderContractPrincipals with empty list (AccountPrincipalChecked consumed None)
+    // One more tick: process_check_principals sees empty list → HolderContractPrincipalCheckPassed
+    super::super::tick().await;
+    // State: ObtainingIdentityAuthnMethods
 
     // --- Register holder authn method on hub (IC agent call: returns hub canister) ---
     mock_obtain_hub_canister_ok(ht_get_test_hub_canister());
