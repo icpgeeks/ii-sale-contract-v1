@@ -16,8 +16,8 @@ use crate::{
         ht_get_test_deployer, ht_get_test_hub_canister, ht_init_test_contract,
         support::mocks::{
             mock_accounts_for_principal_check_empty, mock_authn_method_register_ok,
-            mock_authn_method_registration_mode_exit_ok, mock_get_principal_response,
-            mock_identity_info_ok, mock_obtain_hub_canister_ok,
+            mock_authn_method_registration_mode_exit_ok, mock_identity_info_ok,
+            mock_obtain_hub_canister_ok, mock_prepare_account_delegation_for_check,
         },
         TEST_AUTHN_CONFIRMATION_CODE, TEST_AUTHN_REGISTER_EXPIRATION_NANOS, TEST_CAPTURE_HOSTNAME,
     },
@@ -81,9 +81,9 @@ pub(crate) async fn drive_to_captured(
     super::super::tick().await;
     // State: CheckHolderContractPrincipals { accounts_to_check: [None] }
 
-    // --- CheckHolderContractPrincipals: get_principal for default account ---
+    // --- CheckHolderContractPrincipals: prepare_account_delegation(None) for default account ---
     // Returns a principal that does NOT match the owner (safe to proceed).
-    mock_get_principal_response(ht_get_test_hub_canister());
+    mock_prepare_account_delegation_for_check(ht_get_test_hub_canister().as_slice().to_vec());
     super::super::tick().await;
     // State: CheckHolderContractPrincipals with empty list (AccountPrincipalChecked consumed None)
     // One more tick: process_check_principals sees empty list → HolderContractPrincipalCheckPassed

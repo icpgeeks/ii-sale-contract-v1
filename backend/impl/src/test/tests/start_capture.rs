@@ -32,7 +32,7 @@ use crate::{
         ht_get_test_deployer, ht_get_test_hub_canister,
         support::mocks::{
             mock_accounts_for_principal_check_empty, mock_authn_method_registration_mode_exit_ok,
-            mock_get_principal_response,
+            mock_prepare_account_delegation_for_check,
         },
         HT_CAPTURED_IDENTITY_NUMBER, HT_SALE_DEAL_SAFE_CLOSE_DURATION, HT_STANDARD_CERT_EXPIRATION,
         TEST_CAPTURE_HOSTNAME,
@@ -226,8 +226,8 @@ async fn test_identity_api_changed() {
         sub_state: CaptureState::CheckHolderContractPrincipals { .. },
     });
 
-    // get_principal for default account → hub canister (safe, not the owner)
-    mock_get_principal_response(ht_get_test_hub_canister());
+    // prepare_account_delegation(None) for default account → hub canister (safe, not the owner)
+    mock_prepare_account_delegation_for_check(ht_get_test_hub_canister().as_slice().to_vec());
     super::tick().await;
     // State: CheckHolderContractPrincipals with empty list (AccountPrincipalChecked consumed None)
     // One more tick: process_check_principals sees empty list → HolderContractPrincipalCheckPassed

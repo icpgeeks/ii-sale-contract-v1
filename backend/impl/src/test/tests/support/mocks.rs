@@ -36,12 +36,6 @@ pub(crate) fn mock_accounts_for_principal_check(accounts: Vec<AccountInfo>) {
     set_test_ic_agent_response(Encode!(&m).unwrap());
 }
 
-/// Mocks IC agent response for `get_principal` (default / synthetic account check):
-/// returns the given principal.
-pub(crate) fn mock_get_principal_response(principal: Principal) {
-    set_test_ic_agent_response(Encode!(&principal).unwrap());
-}
-
 /// Mocks IC agent response for `prepare_account_delegation` during the
 /// principal-check phase (numbered account).  The `user_key` is used to derive
 /// the account principal via `Principal::self_authenticating(user_key)`.

@@ -173,69 +173,48 @@ async fn get_account_principal(
     device_key: Vec<u8>,
     sender: common_canister_impl::handlers::ic_request::builder::RequestSender,
 ) -> Result<AccountPrincipalResult, HolderProcessingError> {
-    match account_number {
-        None => {
-            // Default account — use the legacy get_principal query.
-            // get_principal does not return an Unauthorized variant; any error
-            // is a genuine IC-agent failure and should be retried.
-            let request_definition = env
-                .get_identity()
-                .build_get_principal_request(&identity_number, &frontend_hostname);
+    // For both default (None) and numbered (Some(n)) accounts we use
+    // prepare_account_delegation — it returns Unauthorized as a proper Result::Err
+    // so we can detect device loss without relying on trap-based behaviour of
+    // the legacy get_principal query.
+    let request_definition = env.get_identity().build_prepare_account_delegation_request(
+        &identity_number,
+        frontend_hostname,
+        account_number,
+        device_key,
+        Duration::from_secs(1),
+    );
 
-            let ic_agent_request = build_ic_agent_request(env, request_definition, sender)
-                .await
-                .map_err(to_internal_error)?;
+    let ic_agent_request = build_ic_agent_request(env, request_definition, sender)
+        .await
+        .map_err(to_internal_error)?;
 
-            let response_data = execute_ic_agent_request(env, ic_agent_request).await?;
+    let response_data = execute_ic_agent_request(env, ic_agent_request).await?;
 
-            env.get_identity()
-                .decode_get_principal_response(&response_data)
-                .map_err(to_internal_error)
-                .map(AccountPrincipalResult::Principal)
+    let prepare_result = env
+        .get_identity()
+        .decode_prepare_account_delegation_response(&response_data)
+        .map_err(to_internal_error)?;
+
+    match prepare_result {
+        Ok(delegation) => Ok(AccountPrincipalResult::Principal(
+            Principal::self_authenticating(&delegation.user_key),
+        )),
+        Err(AccountDelegationError::NoSuchDelegation) => {
+            Err(HolderProcessingError::InternalError {
+                error: format!(
+                    "check_holder_contract_principals: no such delegation for account {:?}",
+                    account_number
+                ),
+            })
         }
-        Some(n) => {
-            // Numbered account — prepare a 1-second delegation to obtain the
-            // account-specific user_key, then derive the principal from it.
-            let request_definition = env.get_identity().build_prepare_account_delegation_request(
-                &identity_number,
-                frontend_hostname,
-                Some(n),
-                device_key,
-                Duration::from_secs(1),
-            );
-
-            let ic_agent_request = build_ic_agent_request(env, request_definition, sender)
-                .await
-                .map_err(to_internal_error)?;
-
-            let response_data = execute_ic_agent_request(env, ic_agent_request).await?;
-
-            let prepare_result = env
-                .get_identity()
-                .decode_prepare_account_delegation_response(&response_data)
-                .map_err(to_internal_error)?;
-
-            match prepare_result {
-                Ok(delegation) => Ok(AccountPrincipalResult::Principal(
-                    Principal::self_authenticating(&delegation.user_key),
-                )),
-                Err(AccountDelegationError::NoSuchDelegation) => {
-                    Err(HolderProcessingError::InternalError {
-                        error: format!(
-                            "check_holder_contract_principals: no such delegation for account {:?}",
-                            n
-                        ),
-                    })
-                }
-                Err(AccountDelegationError::Unauthorized(_principal)) => {
-                    // Our ECDSA key is no longer authorised on this identity —
-                    // treat this the same as get_accounts returning Unauthorized.
-                    Ok(AccountPrincipalResult::Unauthorized)
-                }
-                Err(AccountDelegationError::InternalCanisterError(reason)) => {
-                    Err(to_ic_agent_error(reason))
-                }
-            }
+        Err(AccountDelegationError::Unauthorized(_principal)) => {
+            // Our ECDSA key is no longer authorised on this identity —
+            // treat this the same as get_accounts returning Unauthorized.
+            Ok(AccountPrincipalResult::Unauthorized)
+        }
+        Err(AccountDelegationError::InternalCanisterError(reason)) => {
+            Err(to_ic_agent_error(reason))
         }
     }
 }
