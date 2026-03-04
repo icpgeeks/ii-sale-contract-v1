@@ -59,8 +59,6 @@ type HoldingStepProto<T extends HoldingStepType> = {
 type HoldingStepFetchingNnsAssetsForAccount = HoldingStepProto<'fetchingNnsAssetsForAccount'> & {
     currentAccountIndex: number;
     totalAccounts: number;
-    //TODO check if it is used and remove if not
-    accountsLeft: number;
     innerStep: NnsAssetsStep;
 };
 
@@ -211,7 +209,6 @@ const getStepFromFetchIdentityAccountsState = (state: FetchIdentityAccountsNnsAs
             const slots = nonNullish(fetchingAssets) ? (fromNullable(fetchingAssets.nns_assets) ?? []) : [];
             const totalAccounts = slots.length;
             const completedCount = slots.filter(isSlotFullyFetched).length;
-            const accountsLeft = totalAccounts - completedCount;
             const currentAccountIndex = Math.min(completedCount + 1, totalAccounts);
             const currentAccNum = fromNullable(union.state.identity_account_number);
             const foundSlotIndex = nonNullish(currentAccNum)
@@ -222,7 +219,7 @@ const getStepFromFetchIdentityAccountsState = (state: FetchIdentityAccountsNnsAs
             }
             const slotIndex = foundSlotIndex >= 0 ? foundSlotIndex : completedCount;
             const innerStep = getStepFromNNS(union.state.sub_state, fetchingAssets, slotIndex);
-            return {type: 'fetchingNnsAssetsForAccount', currentAccountIndex, totalAccounts, accountsLeft, innerStep};
+            return {type: 'fetchingNnsAssetsForAccount', currentAccountIndex, totalAccounts, innerStep};
         }
         case 'FinishCurrentNnsAccountFetch': {
             const slots = nonNullish(fetchingAssets) ? (fromNullable(fetchingAssets.nns_assets) ?? []) : [];
@@ -231,7 +228,7 @@ const getStepFromFetchIdentityAccountsState = (state: FetchIdentityAccountsNnsAs
             const accountsLeft = totalAccounts - completedCount;
             if (accountsLeft > 0) {
                 const currentAccountIndex = Math.min(completedCount + 1, totalAccounts);
-                return {type: 'fetchingNnsAssetsForAccount', currentAccountIndex, totalAccounts, accountsLeft, innerStep: {type: 'finishCurrentNnsAccountFetch'}};
+                return {type: 'fetchingNnsAssetsForAccount', currentAccountIndex, totalAccounts, innerStep: {type: 'finishCurrentNnsAccountFetch'}};
             }
             return {type: 'assetsFetchedButNotChecked'};
         }
