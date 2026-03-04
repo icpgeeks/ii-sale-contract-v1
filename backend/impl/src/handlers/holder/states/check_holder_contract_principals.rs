@@ -146,6 +146,7 @@ pub(crate) async fn process(
         HolderProcessingEvent::Capturing {
             event: CaptureProcessingEvent::AccountPrincipalChecked {
                 account_number: current_account,
+                principal,
             },
         },
     )?;

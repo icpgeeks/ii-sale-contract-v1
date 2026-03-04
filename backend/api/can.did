@@ -175,7 +175,10 @@ type CaptureProcessingEvent = variant {
   IdentityAPIChangeDetected;
   HolderAuthnMethodRegisterError : record { error : CaptureError };
   IdentityAuthnMethodDeleted : record { public_key : blob };
-  AccountPrincipalChecked : record { account_number : opt nat64 };
+  AccountPrincipalChecked : record {
+    "principal" : principal;
+    account_number : opt nat64;
+  };
   IdentityAuthnMethodsDeleted : record { identity_name : opt text };
   IdentityAuthnMethodsResync;
   AccountsForPrincipalCheckGot : record { accounts_to_check : vec opt nat64 };

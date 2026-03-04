@@ -328,6 +328,7 @@ pub enum CaptureProcessingEvent {
     },
     AccountPrincipalChecked {
         account_number: Option<IdentityAccountNumber>,
+        principal: Principal,
     },
     HolderContractPrincipalIsHolderOwner {
         account_number: Option<IdentityAccountNumber>,
