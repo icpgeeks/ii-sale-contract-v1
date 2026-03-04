@@ -1,7 +1,7 @@
 use candid::Principal;
 use common_canister_impl::{
     components::identity::api::{
-        AccountInfo, AuthnMethod, AuthnMethodData, AuthnMethodProtection, AuthnMethodPurpose,
+        AuthnMethod, AuthnMethodData, AuthnMethodProtection, AuthnMethodPurpose,
         AuthnMethodRegisterError, AuthnMethodRegistrationModeExitError,
         AuthnMethodSecuritySettings, MetadataMapV2, WebAuthn,
     },
@@ -20,8 +20,7 @@ use crate::test::tests::support::mocks::{
     make_account_info, mock_accounts_for_principal_check, mock_accounts_for_principal_check_empty,
     mock_authn_method_register_err, mock_authn_method_register_ok,
     mock_authn_method_registration_mode_exit_err, mock_authn_method_registration_mode_exit_ok,
-    mock_get_principal_response, mock_identity_info_ok, mock_obtain_hub_canister_ok,
-    mock_prepare_account_delegation_for_check,
+    mock_get_principal_response, mock_identity_info_ok, mock_prepare_account_delegation_for_check,
 };
 use crate::{
     handlers::holder::states::get_holder_model,

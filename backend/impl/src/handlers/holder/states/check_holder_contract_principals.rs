@@ -161,9 +161,9 @@ pub(crate) async fn process(
 ///
 /// - `None`    → calls the legacy `get_principal` (default / synthetic account).
 /// - `Some(n)` → calls `prepare_account_delegation` with a minimal TTL and
-///               computes `Principal::self_authenticating(user_key)`.
-///               The side-effect (a short-lived delegation entry in II state)
-///               expires after 1 second and is harmless.
+///   computes `Principal::self_authenticating(user_key)`.
+///   The side-effect (a short-lived delegation entry in II state)
+///   expires after 1 second and is harmless.
 async fn get_account_principal(
     env: &Environment,
     identity_number: u64,
