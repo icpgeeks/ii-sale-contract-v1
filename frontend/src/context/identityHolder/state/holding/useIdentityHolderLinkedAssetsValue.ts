@@ -81,10 +81,10 @@ type ContextValidAssets = {
     // Per-identity-account data, indexed by slot order
     identityAccounts: Array<IdentityAccountAssets>;
 
-    // Flat list for AccountList UI (all accounts from all slots in slot order)
+    // Flat list for AccountList UI (all accounts from all slots, sorted by balance descending)
     allAccounts: Array<MainAccount | SubAccount>;
 
-    // Aggregated neurons across all slots (unique neuron_ids verified), for NeuronList + stats
+    // Aggregated neurons across all slots (unique neuron_ids verified), sorted by total stake desc → dissolve delay asc → neuron_id asc; for NeuronList + stats
     neurons: Neurons | undefined;
 
     // Aggregated totals
@@ -171,6 +171,7 @@ export const useIdentityHolderLinkedAssetsValue = (): Context => {
         // If every slot has no accounts AND no neurons → noAssets
         const hasAnyData = parsedSlots.some((s) => s.numberOfAccounts > 0 || s.numberOfNeurons > 0);
         if (!hasAnyData) {
+            applicationLogger.log('All slots parsed successfully but contain no accounts and no neurons', {parsedSlots});
             return {type: 'noAssets'};
         }
 
@@ -238,6 +239,7 @@ const getAccounts = (accounts: NnsHolderAssets['accounts']): {type: 'noAccounts'
      */
     const mainAccount: MainAccount | undefined = getMainAccount(fromNullable(accountsInformation.main_account_information));
     if (isNullish(mainAccount)) {
+        applicationLogger.log('Failed to parse main account', {accountsInformation});
         return {type: 'invalidAccounts'};
     }
     /**
@@ -257,6 +259,7 @@ const getAccounts = (accounts: NnsHolderAssets['accounts']): {type: 'noAccounts'
     }
     const subAccounts: Array<SubAccount> = compactArray(accountsInformation.sub_accounts.map(getSubAccount));
     if (subAccounts.length == 0) {
+        applicationLogger.log('All sub-accounts failed to parse', {subAccountsRaw: accountsInformation.sub_accounts});
         return {type: 'invalidAccounts'};
     }
     const totalValueUlps = subAccounts.reduce((acc, subAccount) => acc + subAccount.balanceUlps, mainAccount.balanceUlps);
@@ -280,12 +283,14 @@ const getAccount = (accountInformation: AccountInformation | undefined): Account
     const {balance, account_identifier} = accountInformation;
     const timestamped = fromNullishNullable(balance);
     if (isNullish(timestamped)) {
+        applicationLogger.log('Account balance is null', {accountInformation});
         return undefined;
     }
     const balanceUlps = timestamped.value;
     const timestampMillis = timestamped.timestamp;
     const accountIdentifierHex = getAccountIdentifierHexFromByteArraySafe(account_identifier);
     if (isNullish(accountIdentifierHex)) {
+        applicationLogger.log('Failed to parse account identifier', {account_identifier});
         return undefined;
     }
     return {
@@ -345,12 +350,14 @@ const getNeuron = (neuronAsset: NeuronAsset | undefined): Neuron | undefined => 
     }
     const timestamped = fromNullable(neuronAsset.info);
     if (isNullish(timestamped)) {
+        applicationLogger.log('Neuron info is null', {neuronAsset});
         return undefined;
     }
     const timestampMillis = timestamped.timestamp;
     const neuronInformation: NeuronInformation = timestamped.value;
     const neuronInformationExtended = fromNullable(neuronInformation.neuron_information_extended);
     if (isNullish(neuronInformationExtended)) {
+        applicationLogger.log('neuron_information_extended is null', {neuronId: neuronAsset.neuron_id, neuronInformation});
         return undefined;
     }
     const neuronId = neuronAsset.neuron_id;
@@ -407,6 +414,7 @@ const getControlledNeurons = (controlledNeurons: NnsHolderAssets['controlled_neu
     const neuronAssets: Array<NeuronAsset> | undefined = fromNullable(controlledNeurons)?.value;
 
     if (isNullish(neuronAssets)) {
+        applicationLogger.log('controlled_neurons outer Optional is None — neuron data was not fetched', {controlledNeurons});
         return {type: 'invalidNeurons'};
     }
     if (neuronAssets.length == 0) {
@@ -414,6 +422,7 @@ const getControlledNeurons = (controlledNeurons: NnsHolderAssets['controlled_neu
     }
     const neurons: Array<Neuron> = compactArray(neuronAssets.map(getNeuron));
     if (neurons.length == 0) {
+        applicationLogger.log('All neurons failed to parse', {neuronAssets});
         return {type: 'invalidNeurons'};
     }
 

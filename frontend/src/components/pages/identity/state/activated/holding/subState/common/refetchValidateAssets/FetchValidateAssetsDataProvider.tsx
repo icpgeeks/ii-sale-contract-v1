@@ -211,6 +211,9 @@ const getStepFromFetchIdentityAccountsState = (state: FetchIdentityAccountsNnsAs
             const foundSlotIndex = nonNullish(currentAccNum)
                 ? slots.findIndex((s) => fromNullable(s.identity_account_number) === currentAccNum)
                 : slots.findIndex((s) => isNullish(fromNullable(s.identity_account_number)));
+            if (foundSlotIndex < 0) {
+                applicationLogger.log('Slot not found in fetchingAssets for current identity_account_number, falling back to completedCount', {currentAccNum, totalAccounts, completedCount});
+            }
             const slotIndex = foundSlotIndex >= 0 ? foundSlotIndex : completedCount;
             const innerStep = getStepFromNNS(union.state.sub_state, fetchingAssets, slotIndex);
             return {type: 'fetchingNnsAssetsForAccount', currentAccountIndex, totalAccounts, accountsLeft, innerStep};
