@@ -469,7 +469,14 @@ export const isSlotFullyFetched = (slot: IdentityAccountNnsAssets): boolean => {
     if (isNullish(accountsInformation)) {
         return true;
     }
-    if (isNullish(fromNullable(accountsInformation.main_account_information))) {
+    const mainAccountInfo = fromNullable(accountsInformation.main_account_information);
+    if (isNullish(mainAccountInfo)) {
+        return false;
+    }
+    if (isNullish(fromNullishNullable(mainAccountInfo.balance))) {
+        return false;
+    }
+    if (accountsInformation.sub_accounts.some((sa) => isNullish(fromNullishNullable(sa.sub_account_information.balance)))) {
         return false;
     }
     return true;
