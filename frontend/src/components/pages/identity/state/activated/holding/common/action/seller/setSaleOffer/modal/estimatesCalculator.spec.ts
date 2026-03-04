@@ -40,7 +40,8 @@ describe('estimatesCalculator', () => {
         describe('calculateReferralRewardTransferAmount', () => {
             it('returns floor(price × referralPermyriad / 10 000) when balance is sufficient', () => {
                 // referralAmount = 1_000_000 × 100 / 10_000 = 10_000
-                const balance = BASE_PRICE - BASE_FEE; // 990_000
+                // 990_000
+                const balance = BASE_PRICE - BASE_FEE;
                 expect(makeCalc().calculateReferralRewardTransferAmount(balance)).toBe(10_000n);
             });
 
