@@ -64,7 +64,7 @@ type Neurons = {
 };
 
 // Data for one identity account slot
-export type IdentityAccountAssets = {
+type IdentityAccountAssets = {
     identityAccountNumber: bigint | undefined;
     principal: Principal;
     accounts: Accounts | undefined;

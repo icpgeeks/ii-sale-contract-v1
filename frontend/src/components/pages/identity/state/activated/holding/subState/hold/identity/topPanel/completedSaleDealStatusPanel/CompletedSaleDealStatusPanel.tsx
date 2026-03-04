@@ -1,6 +1,9 @@
 import {ICPToken, isNullish} from '@dfinity/utils';
+import {Flex} from 'antd';
+import {InfoAlert} from 'frontend/src/components/widgets/alert/InfoAlert';
 import {SuccessAlert} from 'frontend/src/components/widgets/alert/SuccessAlert';
 import {useIdentityHolderContextSafe} from 'frontend/src/context/identityHolder/IdentityHolderProvider';
+import {useIdentityHolderLinkedAssetsContext} from 'frontend/src/context/identityHolder/state/holding/IdentityHolderLinkedAssetsProvider';
 import {useIdentityHolderStateContext} from 'frontend/src/context/identityHolder/state/IdentityHolderStateProvider';
 import {i18} from 'frontend/src/i18';
 import {formatTokenAmountWithSymbol} from 'frontend/src/utils/core/token/token';
@@ -63,5 +66,21 @@ const BuyerComponent = () => {
         </div>
     );
 
-    return <SuccessAlert message={label} />;
+    return (
+        <Flex vertical gap={16}>
+            <SuccessAlert message={label} />
+            <BuyerMultipleAccountsHint isClosedState={isClosedState} />
+        </Flex>
+    );
+};
+
+const BuyerMultipleAccountsHint = ({isClosedState}: {isClosedState: boolean}) => {
+    const linkedAssets = useIdentityHolderLinkedAssetsContext();
+    if (linkedAssets.type == 'assets' && linkedAssets.identityAccounts.length > 1) {
+        const message = isClosedState
+            ? i18.holder.state.holding.common.topPanel.completedSaleDealStatus.buyer.multipleAccountsHint.closed
+            : i18.holder.state.holding.common.topPanel.completedSaleDealStatus.buyer.multipleAccountsHint.notClosed;
+        return <InfoAlert message={message()} />;
+    }
+    return null;
 };

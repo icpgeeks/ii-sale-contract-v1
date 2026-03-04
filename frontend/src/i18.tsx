@@ -529,6 +529,18 @@ This description does not cover all possible risks, limitations, or edge cases. 
                                 part2: {
                                     closed: ', and transferred it to your device.',
                                     notClosed: '.'
+                                },
+                                multipleAccountsHint: {
+                                    closed: () => (
+                                        <>
+                                            This Internet Identity has <b>multiple NNS accounts</b>. Log in with each account to view all assets.
+                                        </>
+                                    ),
+                                    notClosed: () => (
+                                        <>
+                                            This Internet Identity has <b>multiple NNS accounts</b>. After transferring it to your device, log in with each account to view all assets.
+                                        </>
+                                    )
                                 }
                             }
                         },
