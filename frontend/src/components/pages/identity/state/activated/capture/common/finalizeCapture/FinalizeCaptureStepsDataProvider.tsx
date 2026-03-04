@@ -39,7 +39,9 @@ export const FinalizeCaptureStepsDataProvider = (props: PropsWithChildren) => {
         if (isNullish(captureState)) {
             return undefined;
         }
-        return getStepFromCaptureState(captureState);
+        const result = getStepFromCaptureState(captureState);
+        applicationLogger.debug('Updating FinalizeCaptureStepsDataProvider context value', {result, captureState});
+        return result;
     }, [captureState]);
 
     const value = useMemo<Context>(() => {
@@ -65,7 +67,8 @@ const getStepFromCaptureState = (subState: CaptureState): CaptureStep => {
         case 'CaptureFailed': {
             return defaultResult;
         }
-        case 'GetHolderContractPrincipal': {
+        case 'GetHolderContractAccounts':
+        case 'CheckHolderContractPrincipals': {
             return {type: 'verifyingPrincipal'};
         }
         case 'NeedDeleteProtectedIdentityAuthnMethod': {

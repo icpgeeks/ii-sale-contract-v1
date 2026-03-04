@@ -6,7 +6,7 @@ import {FinalizeCaptureDescription} from '../../../common/finalizeCapture/Finali
 import {FinalizeCaptureSteps} from '../../../common/finalizeCapture/FinalizeCaptureSteps';
 import {FinalizeCaptureStepsDataProvider} from '../../../common/finalizeCapture/FinalizeCaptureStepsDataProvider';
 
-export const GetHolderContractPrincipalPanel = () => {
+export const GetHolderContractAccountsPanel = () => {
     return (
         <PanelCard>
             <Flex vertical gap={16}>

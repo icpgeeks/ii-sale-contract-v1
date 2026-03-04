@@ -98,7 +98,9 @@ export const FetchValidateAssetsDataProvider = (props: PropsWithChildren) => {
         if (isNullish(holdingState)) {
             return undefined;
         }
-        return getStepFromHoldingState(holdingState, fetchingAssets);
+        const result = getStepFromHoldingState(holdingState, fetchingAssets);
+        applicationLogger.debug('Updating FetchValidateAssetsDataProvider context value', {result, holdingState, fetchingAssets});
+        return result;
     }, [holdingState, fetchingAssets]);
 
     const value = useMemo<Context>(() => {

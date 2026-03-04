@@ -215,7 +215,7 @@ export const idlFactory = ({ IDL }) => {
   const CaptureState = IDL.Variant({
     'CaptureFailed' : IDL.Record({ 'error' : CaptureError }),
     'CreateEcdsaKey' : IDL.Null,
-    'GetHolderContractPrincipal' : ConfirmHolderAuthnMethodRegistrationArgs,
+    'GetHolderContractAccounts' : ConfirmHolderAuthnMethodRegistrationArgs,
     'NeedConfirmAuthnMethodSessionRegistration' : IDL.Record({
       'confirmation_code' : IDL.Text,
       'expiration' : IDL.Nat64,
@@ -228,6 +228,10 @@ export const idlFactory = ({ IDL }) => {
       'authn_pubkeys' : IDL.Vec(IDL.Vec(IDL.Nat8)),
       'active_registration' : IDL.Bool,
       'openid_credentials' : IDL.Opt(IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))),
+    }),
+    'CheckHolderContractPrincipals' : IDL.Record({
+      'accounts_to_check' : IDL.Vec(IDL.Opt(IDL.Nat64)),
+      'frontend_hostname' : IDL.Text,
     }),
     'StartCapture' : IDL.Null,
     'NeedDeleteProtectedIdentityAuthnMethod' : IDL.Record({
@@ -626,6 +630,7 @@ export const idlFactory = ({ IDL }) => {
   const CaptureProcessingEvent = IDL.Variant({
     'HolderAuthnMethodRegistered' : IDL.Null,
     'AuthnMethodSessionRegistrationConfirmed' : ConfirmHolderAuthnMethodRegistrationArgs,
+    'GetHolderContractPrincipalUnauthorized' : IDL.Null,
     'IdentityAuthnMethodProtected' : IDL.Record({
       'public_key' : IDL.Vec(IDL.Nat8),
       'meta_data' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text)),
@@ -633,16 +638,14 @@ export const idlFactory = ({ IDL }) => {
     'IdentityOpenidCredentialDeleted' : IDL.Record({
       'openid_credential_key' : IDL.Tuple(IDL.Text, IDL.Text),
     }),
-    'HolderContractPrincipalIsHolderOwner' : IDL.Null,
+    'HolderContractPrincipalIsHolderOwner' : IDL.Record({
+      'account_number' : IDL.Opt(IDL.Nat64),
+    }),
     'IdentityAuthnMethodRegistrationExited' : IDL.Null,
     'CaptureFinished' : IDL.Null,
     'ProtectedIdentityAuthnMethodDeleted' : IDL.Null,
-    'GetHolderContractPrincipalUnathorized' : IDL.Null,
     'IdentityAuthnMethodsPartiallyDeleted' : IDL.Null,
     'AuthnMethodSessionRegisterError' : IDL.Record({ 'error' : CaptureError }),
-    'HolderContractPrincipalObtained' : IDL.Record({
-      'holder_contract_principal' : IDL.Principal,
-    }),
     'EcdsaKeyCreated' : IDL.Record({ 'ecdsa_key' : IDL.Vec(IDL.Nat8) }),
     'AuthnMethodSessionRegistered' : IDL.Record({
       'confirmation_code' : IDL.Text,
@@ -656,15 +659,23 @@ export const idlFactory = ({ IDL }) => {
       'active_registration' : IDL.Bool,
       'openid_credentials' : IDL.Opt(IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))),
     }),
+    'HolderContractPrincipalCheckPassed' : IDL.Null,
     'IdentityAPIChangeDetected' : IDL.Null,
     'HolderAuthnMethodRegisterError' : IDL.Record({ 'error' : CaptureError }),
     'IdentityAuthnMethodDeleted' : IDL.Record({
       'public_key' : IDL.Vec(IDL.Nat8),
     }),
+    'AccountPrincipalChecked' : IDL.Record({
+      'principal' : IDL.Principal,
+      'account_number' : IDL.Opt(IDL.Nat64),
+    }),
     'IdentityAuthnMethodsDeleted' : IDL.Record({
       'identity_name' : IDL.Opt(IDL.Text),
     }),
     'IdentityAuthnMethodsResync' : IDL.Null,
+    'AccountsForPrincipalCheckGot' : IDL.Record({
+      'accounts_to_check' : IDL.Vec(IDL.Opt(IDL.Nat64)),
+    }),
     'CaptureStarted' : IDL.Null,
   });
   const ReleaseProcessingEvent = IDL.Variant({

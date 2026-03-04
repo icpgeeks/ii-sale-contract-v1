@@ -130,6 +130,7 @@ export type CaptureProcessingEvent = { 'HolderAuthnMethodRegistered' : null } |
   {
     'AuthnMethodSessionRegistrationConfirmed' : ConfirmHolderAuthnMethodRegistrationArgs
   } |
+  { 'GetHolderContractPrincipalUnauthorized' : null } |
   {
     'IdentityAuthnMethodProtected' : {
       'public_key' : Uint8Array | number[],
@@ -141,18 +142,16 @@ export type CaptureProcessingEvent = { 'HolderAuthnMethodRegistered' : null } |
       'openid_credential_key' : [string, string],
     }
   } |
-  { 'HolderContractPrincipalIsHolderOwner' : null } |
+  {
+    'HolderContractPrincipalIsHolderOwner' : {
+      'account_number' : [] | [bigint],
+    }
+  } |
   { 'IdentityAuthnMethodRegistrationExited' : null } |
   { 'CaptureFinished' : null } |
   { 'ProtectedIdentityAuthnMethodDeleted' : null } |
-  { 'GetHolderContractPrincipalUnathorized' : null } |
   { 'IdentityAuthnMethodsPartiallyDeleted' : null } |
   { 'AuthnMethodSessionRegisterError' : { 'error' : CaptureError } } |
-  {
-    'HolderContractPrincipalObtained' : {
-      'holder_contract_principal' : Principal,
-    }
-  } |
   { 'EcdsaKeyCreated' : { 'ecdsa_key' : Uint8Array | number[] } } |
   {
     'AuthnMethodSessionRegistered' : {
@@ -170,15 +169,27 @@ export type CaptureProcessingEvent = { 'HolderAuthnMethodRegistered' : null } |
       'openid_credentials' : [] | [Array<[string, string]>],
     }
   } |
+  { 'HolderContractPrincipalCheckPassed' : null } |
   { 'IdentityAPIChangeDetected' : null } |
   { 'HolderAuthnMethodRegisterError' : { 'error' : CaptureError } } |
   { 'IdentityAuthnMethodDeleted' : { 'public_key' : Uint8Array | number[] } } |
+  {
+    'AccountPrincipalChecked' : {
+      'principal' : Principal,
+      'account_number' : [] | [bigint],
+    }
+  } |
   { 'IdentityAuthnMethodsDeleted' : { 'identity_name' : [] | [string] } } |
   { 'IdentityAuthnMethodsResync' : null } |
+  {
+    'AccountsForPrincipalCheckGot' : {
+      'accounts_to_check' : Array<[] | [bigint]>,
+    }
+  } |
   { 'CaptureStarted' : null };
 export type CaptureState = { 'CaptureFailed' : { 'error' : CaptureError } } |
   { 'CreateEcdsaKey' : null } |
-  { 'GetHolderContractPrincipal' : ConfirmHolderAuthnMethodRegistrationArgs } |
+  { 'GetHolderContractAccounts' : ConfirmHolderAuthnMethodRegistrationArgs } |
   {
     'NeedConfirmAuthnMethodSessionRegistration' : {
       'confirmation_code' : string,
@@ -196,6 +207,12 @@ export type CaptureState = { 'CaptureFailed' : { 'error' : CaptureError } } |
       'authn_pubkeys' : Array<Uint8Array | number[]>,
       'active_registration' : boolean,
       'openid_credentials' : [] | [Array<[string, string]>],
+    }
+  } |
+  {
+    'CheckHolderContractPrincipals' : {
+      'accounts_to_check' : Array<[] | [bigint]>,
+      'frontend_hostname' : string,
     }
   } |
   { 'StartCapture' : null } |

@@ -144,6 +144,7 @@ type CaptureError = variant {
 type CaptureProcessingEvent = variant {
   HolderAuthnMethodRegistered;
   AuthnMethodSessionRegistrationConfirmed : ConfirmHolderAuthnMethodRegistrationArgs;
+  GetHolderContractPrincipalUnauthorized;
   IdentityAuthnMethodProtected : record {
     public_key : blob;
     meta_data : vec record { text; text };
@@ -151,16 +152,12 @@ type CaptureProcessingEvent = variant {
   IdentityOpenidCredentialDeleted : record {
     openid_credential_key : record { text; text };
   };
-  HolderContractPrincipalIsHolderOwner;
+  HolderContractPrincipalIsHolderOwner : record { account_number : opt nat64 };
   IdentityAuthnMethodRegistrationExited;
   CaptureFinished;
   ProtectedIdentityAuthnMethodDeleted;
-  GetHolderContractPrincipalUnathorized;
   IdentityAuthnMethodsPartiallyDeleted;
   AuthnMethodSessionRegisterError : record { error : CaptureError };
-  HolderContractPrincipalObtained : record {
-    holder_contract_principal : principal;
-  };
   EcdsaKeyCreated : record { ecdsa_key : blob };
   AuthnMethodSessionRegistered : record {
     confirmation_code : text;
@@ -174,17 +171,23 @@ type CaptureProcessingEvent = variant {
     active_registration : bool;
     openid_credentials : opt vec record { text; text };
   };
+  HolderContractPrincipalCheckPassed;
   IdentityAPIChangeDetected;
   HolderAuthnMethodRegisterError : record { error : CaptureError };
   IdentityAuthnMethodDeleted : record { public_key : blob };
+  AccountPrincipalChecked : record {
+    "principal" : principal;
+    account_number : opt nat64;
+  };
   IdentityAuthnMethodsDeleted : record { identity_name : opt text };
   IdentityAuthnMethodsResync;
+  AccountsForPrincipalCheckGot : record { accounts_to_check : vec opt nat64 };
   CaptureStarted;
 };
 type CaptureState = variant {
   CaptureFailed : record { error : CaptureError };
   CreateEcdsaKey;
-  GetHolderContractPrincipal : ConfirmHolderAuthnMethodRegistrationArgs;
+  GetHolderContractAccounts : ConfirmHolderAuthnMethodRegistrationArgs;
   NeedConfirmAuthnMethodSessionRegistration : record {
     confirmation_code : text;
     expiration : nat64;
@@ -197,6 +200,10 @@ type CaptureState = variant {
     authn_pubkeys : vec blob;
     active_registration : bool;
     openid_credentials : opt vec record { text; text };
+  };
+  CheckHolderContractPrincipals : record {
+    accounts_to_check : vec opt nat64;
+    frontend_hostname : text;
   };
   StartCapture;
   NeedDeleteProtectedIdentityAuthnMethod : record {
