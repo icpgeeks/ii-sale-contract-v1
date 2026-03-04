@@ -40,7 +40,7 @@ export const FinalizeCaptureStepsDataProvider = (props: PropsWithChildren) => {
             return undefined;
         }
         const result = getStepFromCaptureState(captureState);
-        applicationLogger.debug('Updating FinalizeCaptureStepsDataProvider context value', {result, captureState});
+        applicationLogger.debug('Updating FinalizeCaptureStepsDataProvider context value', `${result.type}`, {result, captureState});
         return result;
     }, [captureState]);
 

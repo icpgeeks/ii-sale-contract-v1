@@ -99,7 +99,11 @@ export const FetchValidateAssetsDataProvider = (props: PropsWithChildren) => {
             return undefined;
         }
         const result = getStepFromHoldingState(holdingState, fetchingAssets);
-        applicationLogger.debug('Updating FetchValidateAssetsDataProvider context value', {result, holdingState, fetchingAssets});
+        applicationLogger.debug('Updating FetchValidateAssetsDataProvider context value', `${result.type}/${result.type == 'fetchingNnsAssetsForAccount' ? result.innerStep.type : ''}`, {
+            result,
+            holdingState,
+            fetchingAssets
+        });
         return result;
     }, [holdingState, fetchingAssets]);
 
