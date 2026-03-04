@@ -76,6 +76,7 @@ const getNnsStepContextFrom = (innerStep: NnsAssetsStep): NnsStepContext => {
             }
             break;
         }
+        case 'finishCurrentNnsAccountFetch':
         case 'n/a': {
             current = 0;
             break;
@@ -96,7 +97,6 @@ const getNnsStepContextFrom = (innerStep: NnsAssetsStep): NnsStepContext => {
 
 export const FetchNnsAssetsSteps = () => {
     const {step} = useFetchValidateAssetsDataContext();
-
     const ctx: NnsStepContext | undefined = useMemo(() => {
         if (isNullish(step) || step.type !== 'fetchingNnsAssetsForAccount') {
             return {current: -1, items: getNnsAssetsStepProps()};
@@ -109,9 +109,11 @@ export const FetchNnsAssetsSteps = () => {
             return false;
         }
         switch (step.type) {
-            case 'fetchingIdentityAccounts':
-            case 'fetchingNnsAssetsForAccount': {
+            case 'fetchingIdentityAccounts': {
                 return false;
+            }
+            case 'fetchingNnsAssetsForAccount': {
+                return step.innerStep.type == 'finishCurrentNnsAccountFetch';
             }
             case 'assetsFetchedButNotChecked':
             case 'checkAccountApproves':

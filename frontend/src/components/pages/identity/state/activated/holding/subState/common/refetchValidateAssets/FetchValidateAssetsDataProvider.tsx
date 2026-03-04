@@ -20,7 +20,7 @@ import type {
 
 // ─── Inner level (NNS sub-steps for one identity account slot) ───────────────
 
-type NnsAssetsStepType = 'obtainDelegation' | 'neuronIds' | 'neurons' | 'deletingNeuronHotkeys' | 'accounts' | 'accountBalances' | 'n/a';
+type NnsAssetsStepType = 'obtainDelegation' | 'neuronIds' | 'neurons' | 'deletingNeuronHotkeys' | 'accounts' | 'accountBalances' | 'finishCurrentNnsAccountFetch' | 'n/a';
 
 type NnsAssetsStepProto<T extends NnsAssetsStepType> = {
     type: T;
@@ -45,6 +45,7 @@ export type NnsAssetsStep =
     | NnsAssetsStepDeletingNeuronHotkeys
     | NnsAssetsStepProto<'accounts'>
     | NnsAssetsStepAccountBalances
+    | NnsAssetsStepProto<'finishCurrentNnsAccountFetch'>
     | NnsAssetsStepProto<'n/a'>;
 
 // ─── Outer level (top-level holding flow steps) ───────────────────────────────
@@ -219,6 +220,14 @@ const getStepFromFetchIdentityAccountsState = (state: FetchIdentityAccountsNnsAs
             return {type: 'fetchingNnsAssetsForAccount', currentAccountIndex, totalAccounts, accountsLeft, innerStep};
         }
         case 'FinishCurrentNnsAccountFetch': {
+            const slots = nonNullish(fetchingAssets) ? (fromNullable(fetchingAssets.nns_assets) ?? []) : [];
+            const totalAccounts = slots.length;
+            const completedCount = slots.filter(isSlotFullyFetched).length;
+            const accountsLeft = totalAccounts - completedCount;
+            if (accountsLeft > 0) {
+                const currentAccountIndex = Math.min(completedCount + 1, totalAccounts);
+                return {type: 'fetchingNnsAssetsForAccount', currentAccountIndex, totalAccounts, accountsLeft, innerStep: {type: 'finishCurrentNnsAccountFetch'}};
+            }
             return {type: 'assetsFetchedButNotChecked'};
         }
         default: {
