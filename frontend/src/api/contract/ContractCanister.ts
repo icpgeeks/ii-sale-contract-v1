@@ -129,6 +129,10 @@ export class ContractAnonymousCanister extends Canister<ContractService> {
         return new ContractAnonymousCanister(canisterId, service, certifiedService);
     }
 
+    getContractOwner = async () => {
+        return await this.caller({}).get_contract_owner({});
+    };
+
     getContractCertificate = async () => {
         return await this.caller({}).get_contract_certificate({});
     };

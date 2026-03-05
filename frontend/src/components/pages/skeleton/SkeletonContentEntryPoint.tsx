@@ -39,7 +39,7 @@ export const SkeletonContentEntryPoint = () => {
             <Route
                 path={PATH_SETTINGS}
                 element={
-                    <RouteContentWrapper childComponentName="Settings">
+                    <RouteContentWrapper childComponentName="Settings" requireCertificateInformation={false} requireHolderInformation={false}>
                         <SettingsEntryPoint />
                     </RouteContentWrapper>
                 }

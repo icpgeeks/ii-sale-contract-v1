@@ -3,7 +3,6 @@ import type {ButtonProps} from 'antd';
 import {ErrorAlert} from 'frontend/src/components/widgets/alert/ErrorAlert';
 import {ErrorMessageText} from 'frontend/src/components/widgets/alert/ErrorMessageText';
 import {useAddContractController} from 'frontend/src/context/identityHolder/state/holding/useAddContractController';
-import {useRefetchIdentityHolder} from 'frontend/src/context/identityHolder/useRefetchIdentityHolder';
 import {applicationLogger} from 'frontend/src/context/logger/logger';
 import {exhaustiveCheckFailedMessage} from 'frontend/src/context/logger/loggerConstants';
 import {i18} from 'frontend/src/i18';
@@ -54,21 +53,13 @@ export const AddControllerModalDataProvider = (props: PropsWithChildren<Props>) 
 
     const actionInProgress = feature.status.inProgress;
 
-    const identityHolderLoaded = useRefetchIdentityHolder();
-
     /**
     ==========================================
     Step
     ==========================================
     */
 
-    const [step, setStep] = useState<Step>('loadingInitialData');
-
-    useEffect(() => {
-        if (identityHolderLoaded) {
-            setStep('enteringPrincipal');
-        }
-    }, [identityHolderLoaded]);
+    const [step, setStep] = useState<Step>('enteringPrincipal');
 
     useEffect(() => {
         if (nonNullish(actionResultSuccess)) {

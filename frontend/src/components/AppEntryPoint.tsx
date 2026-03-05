@@ -11,6 +11,8 @@ import {AuthProvider, useAuthContext} from '../context/auth/AuthProvider';
 import {CanisterProvider} from '../context/canister/CanisterProvider';
 import {CurrentCanisterIdProvider, useCurrentCanisterIdContext} from '../context/canisterId/CurrentCanisterIdProvider';
 import {ContractCertificateProvider} from '../context/certificate/ContractCertificateProvider';
+import {ContractOwnerPreloader} from '../context/contract/ContractOwnerPreloader';
+import {ContractOwnerProvider} from '../context/contract/ContractOwnerProvider';
 import {DelegationExpirationLogger} from '../context/DelegationExpirationLogger';
 import {FaviconMonitor} from '../context/favicon/FaviconMonitor';
 import {CanisterStatusPreloader} from '../context/ic/canisterStatus/CanisterStatusPreloader';
@@ -93,17 +95,20 @@ const DataComponents = (props: PropsWithChildren) => {
                         <ContractCertificatePreloader />
                         <IdentityHolderProvider>
                             <IdentityHolderPreloader />
-                            <IdentityHolderStateProvider>
-                                <TemporaryUIData />
-                                <IdentityHolderAssetsProvider>
-                                    <IdentityHolderLinkedAssetsProvider>
-                                        <IdentityHolderProcessor>
-                                            <IdentityHolderAutoFetcher />
-                                            {props.children}
-                                        </IdentityHolderProcessor>
-                                    </IdentityHolderLinkedAssetsProvider>
-                                </IdentityHolderAssetsProvider>
-                            </IdentityHolderStateProvider>
+                            <ContractOwnerProvider>
+                                <ContractOwnerPreloader />
+                                <IdentityHolderStateProvider>
+                                    <TemporaryUIData />
+                                    <IdentityHolderAssetsProvider>
+                                        <IdentityHolderLinkedAssetsProvider>
+                                            <IdentityHolderProcessor>
+                                                <IdentityHolderAutoFetcher />
+                                                {props.children}
+                                            </IdentityHolderProcessor>
+                                        </IdentityHolderLinkedAssetsProvider>
+                                    </IdentityHolderAssetsProvider>
+                                </IdentityHolderStateProvider>
+                            </ContractOwnerProvider>
                         </IdentityHolderProvider>
                     </ContractCertificateProvider>
                 </CurrentCanisterStatusProviderWithPreloader>

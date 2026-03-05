@@ -137,7 +137,7 @@ export function AuthProvider(props: PropsWithChildren<{logger: Logger}>) {
 
     const isCurrentLoggedInPrincipal = useCallback(
         (anotherPrincipal: Principal | undefined) => {
-            if (principal == undefined || anotherPrincipal == undefined) {
+            if (principal == undefined || principal.isAnonymous() || anotherPrincipal == undefined) {
                 return false;
             }
             return principal.compareTo(anotherPrincipal) == 'eq';

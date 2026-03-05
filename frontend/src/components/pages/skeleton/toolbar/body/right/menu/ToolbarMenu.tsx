@@ -22,7 +22,8 @@ const menuDarkModeKey = 'darkMode';
 export const ToolbarMenu = () => {
     const {logout, isAuthenticated} = useAuthContext();
     const [disconnectModal, disconnectModalContextHolder] = Modal.useModal();
-    const areSettingsAvailable = useSettingsPageAvailable();
+    const useSettingsPageAvailableResult = useSettingsPageAvailable();
+    const areSettingsAvailable = useSettingsPageAvailableResult.type === 'available' && useSettingsPageAvailableResult.areSettingsAvailable;
     const {toggleTheme} = useMediaTheme();
 
     const [open, setOpen] = useState(false);

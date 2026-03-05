@@ -1,5 +1,4 @@
 import {Alert, Flex, Grid} from 'antd';
-import {useIdentityHolderContext} from 'frontend/src/context/identityHolder/IdentityHolderProvider';
 import {i18} from 'frontend/src/i18';
 import {PanelHeader} from '../../widgets/PanelHeader';
 import {AddControllerBlock} from './addController/AddControllerBlock';
@@ -9,12 +8,6 @@ import {StartReleaseBlock} from './startRelease/StartReleaseBlock';
 const {useBreakpoint} = Grid;
 
 export const DangerPanel = () => {
-    const {isOwnedByCurrentUser} = useIdentityHolderContext();
-
-    if (!isOwnedByCurrentUser) {
-        return null;
-    }
-
     return <Alert message={<Content />} type="error" showIcon={false} />;
 };
 

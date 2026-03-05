@@ -114,16 +114,9 @@ export const useIdentityHolder = (): Context => {
     }, [holder?.identity_name]);
 
     const isOwnedByCurrentUser: boolean = useMemo(() => {
-        if (isNullish(principal) || principal.isAnonymous()) {
-            return false;
-        }
         const owner = fromNullishNullable(holder?.owner);
-        if (isNullish(owner)) {
-            return false;
-        }
-        applicationLogger.debug('useIdentityHolder: isOwnedByCurrentUser check', {principal: principal.toText(), owner: owner.toText()});
-        return principal.compareTo(owner) == 'eq';
-    }, [principal, holder?.owner]);
+        return isCurrentLoggedInPrincipal(owner);
+    }, [isCurrentLoggedInPrincipal, holder?.owner]);
 
     const isPotentialLoggedInBuyer: boolean = useMemo(() => {
         if (isNullish(principal) || principal.isAnonymous()) {
@@ -133,8 +126,8 @@ export const useIdentityHolder = (): Context => {
         if (isNullish(owner)) {
             return false;
         }
-        return principal.compareTo(owner) != 'eq';
-    }, [principal, holder?.owner]);
+        return !isCurrentLoggedInPrincipal(owner);
+    }, [principal, isCurrentLoggedInPrincipal, holder?.owner]);
 
     const holderProcessingState: HolderProcessingRemoteState | undefined = useMemo(() => {
         if (isNullish(holder?.schedule_processing)) {

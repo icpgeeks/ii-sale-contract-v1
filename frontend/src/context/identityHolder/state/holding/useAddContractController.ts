@@ -1,4 +1,5 @@
 import {useICCanisterCallContract} from 'frontend/src/api/contract/useICCallContract';
+import {useContractOwnerContext} from 'frontend/src/context/contract/ContractOwnerProvider';
 import {type Feature} from 'frontend/src/utils/core/feature/feature';
 import {reusePromiseWrapper, SHARED_PROMISE_QUEUE} from 'frontend/src/utils/core/promise/reusePromise';
 import {hasProperty} from 'frontend/src/utils/core/typescript/typescriptAddons';
@@ -22,6 +23,7 @@ type Context = {
 
 export const useAddContractController = () => {
     const {fetchHolder, holderIsLockedForProcessing, isOwnedByCurrentUser} = useIdentityHolderContext();
+    const {isOwnedByCurrentUser: isContractOwner} = useContractOwnerContext();
     const {call, feature, responseError} = useICCanisterCallContract('addContractController');
 
     const addContractController = useMemo(
@@ -30,7 +32,7 @@ export const useAddContractController = () => {
                 async (parameters: Parameters) => {
                     const logMessagePrefix = `useAddContractController:`;
 
-                    if (!isOwnedByCurrentUser) {
+                    if (!isOwnedByCurrentUser && !isContractOwner) {
                         apiLogger.debug(notOwnerMessage(logMessagePrefix));
                         return;
                     }
@@ -54,7 +56,7 @@ export const useAddContractController = () => {
                 },
                 {queue: SHARED_PROMISE_QUEUE}
             ),
-        [isOwnedByCurrentUser, holderIsLockedForProcessing, call, fetchHolder]
+        [isOwnedByCurrentUser, isContractOwner, holderIsLockedForProcessing, call, fetchHolder]
     );
 
     return useMemo<Context>(
