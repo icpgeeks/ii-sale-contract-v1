@@ -22,13 +22,14 @@ use crate::{
         support::{
             fixtures::fake_neuron,
             mocks::{
-                mock_account_ok, mock_identity_accounts_no_accounts, mock_neuron_ids,
-                mock_neurons_response, mock_prepare_delegation_ok,
+                mock_account_not_found, mock_account_ok, mock_identity_accounts_no_accounts,
+                mock_neuron_ids, mock_neurons_response, mock_prepare_delegation_ok,
                 mock_prepare_delegation_ok_default,
             },
         },
         HT_CAPTURED_IDENTITY_NUMBER, HT_MIN_PRICE, HT_QUARANTINE_DURATION,
         HT_SALE_DEAL_SAFE_CLOSE_DURATION, HT_STANDARD_CERT_EXPIRATION, TEST_DELEGATION_KEY_1,
+        TEST_DELEGATION_KEY_2,
     },
     test_state_matches,
     updates::holder::{
@@ -780,6 +781,314 @@ async fn test_refetch_with_limit_failure_after_sale() {
         sub_state: HoldingState::Unsellable {
             reason: UnsellableReason::CheckLimitFailed {
                 reason: LimitFailureReason::TooManyNeurons
+            }
+        },
+    });
+}
+
+// ---------------------------------------------------------------------------
+// test_neuron_limit_across_multiple_identity_accounts
+// ---------------------------------------------------------------------------
+
+/// Verifies that `max_neurons_allowed` is enforced across **all** identity accounts,
+/// not just the one currently being fetched.
+///
+/// Setup (test settings: max_neurons_allowed = 5):
+///   - Account 0 (default, key 1): 3 neurons controlled by its principal.
+///   - Account 1 (numbered, key 2): 3 neurons controlled by its principal.
+///   Total: 6 > 5 → must transition to `Unsellable::CheckLimitFailed::TooManyNeurons`
+///   while processing account 1, even though account 1 alone is within the limit.
+#[tokio::test]
+async fn test_neuron_limit_across_multiple_identity_accounts() {
+    use crate::test::tests::drivers::fetch::send_delegation_got;
+    use crate::test::tests::support::fixtures::fake_neuron;
+
+    drive_to_captured(
+        HT_STANDARD_CERT_EXPIRATION,
+        ht_get_test_deployer(),
+        HT_CAPTURED_IDENTITY_NUMBER,
+    )
+    .await;
+
+    // StartFetchAssets → GetIdentityAccounts
+    super::tick().await;
+
+    // Two identity accounts: default (None) + numbered (Some(1))
+    use crate::test::tests::support::mocks::mock_identity_accounts_ok;
+    use common_canister_impl::components::identity::api::AccountInfo;
+    mock_identity_accounts_ok(vec![
+        AccountInfo {
+            account_number: None,
+            origin: "nns.ic0.app".to_string(),
+            last_used: None,
+            name: None,
+        },
+        AccountInfo {
+            account_number: Some(1),
+            origin: "nns.ic0.app".to_string(),
+            last_used: None,
+            name: Some("Account 1".to_string()),
+        },
+    ]);
+    super::tick().await;
+    // State: NeedPrepareDelegation (account 0)
+
+    // ---- Account 0: 3 neurons ----
+    mock_prepare_delegation_ok(TEST_DELEGATION_KEY_1.to_vec());
+    super::tick().await;
+    // State: GetDelegationWaiting
+
+    send_delegation_got(TEST_DELEGATION_KEY_1.to_vec());
+    // State: GetNeuronsIds
+
+    let principal_0 = get_holder_model(|_, model| model.get_delegation_controller().unwrap());
+
+    // 3 neuron IDs for account 0
+    mock_neuron_ids(vec![1u64, 2, 3]);
+    super::tick().await;
+    // State: GetNeuronsInformation
+
+    // Page 1: all 3 neurons controlled by principal_0
+    mock_neurons_response(&ListNeuronsResponse {
+        neuron_infos: vec![],
+        full_neurons: vec![
+            fake_neuron(1, Some(principal_0), vec![]),
+            fake_neuron(2, Some(principal_0), vec![]),
+            fake_neuron(3, Some(principal_0), vec![]),
+        ],
+        total_pages_available: None,
+    });
+    super::tick().await;
+
+    // Extra tick → NeuronsInformationObtained → DeletingNeuronsHotkeys (empty) → GetAccountsInformation
+    super::tick().await;
+    while !get_holder_model(|_, model| {
+        matches!(
+            &model.state.value,
+            HolderState::Holding {
+                sub_state: HoldingState::FetchAssets {
+                    fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                        sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                            sub_state: FetchNnsAssetsState::GetAccountsInformation,
+                            ..
+                        },
+                    },
+                    ..
+                }
+            }
+        )
+    }) {
+        super::tick().await;
+    }
+
+    // Account 0: no NNS dapp sub-accounts
+    mock_account_not_found();
+    super::tick().await;
+    // State: GetAccountsBalances → drain
+    while get_holder_model(|_, model| {
+        matches!(
+            &model.state.value,
+            HolderState::Holding {
+                sub_state: HoldingState::FetchAssets {
+                    fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                        sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                            sub_state: FetchNnsAssetsState::GetAccountsBalances,
+                            ..
+                        },
+                    },
+                    ..
+                }
+            }
+        )
+    }) {
+        super::tick().await;
+    }
+    // State: FinishCurrentNnsAccountFetch
+    super::tick().await;
+    // State: NeedPrepareDelegation (account 1)
+
+    // ---- Account 1: 3 neurons — should push total to 6, exceeding limit of 5 ----
+    mock_prepare_delegation_ok(TEST_DELEGATION_KEY_2.to_vec());
+    super::tick().await;
+    // State: GetDelegationWaiting
+
+    send_delegation_got(TEST_DELEGATION_KEY_2.to_vec());
+    // State: GetNeuronsIds
+
+    let principal_1 = get_holder_model(|_, model| model.get_delegation_controller().unwrap());
+
+    // 3 neuron IDs for account 1
+    mock_neuron_ids(vec![4u64, 5, 6]);
+    super::tick().await;
+    // State: GetNeuronsInformation
+
+    // Page 1: all 3 neurons controlled by principal_1 → total non-zero = 3 + 3 = 6 > 5
+    mock_neurons_response(&ListNeuronsResponse {
+        neuron_infos: vec![],
+        full_neurons: vec![
+            fake_neuron(4, Some(principal_1), vec![]),
+            fake_neuron(5, Some(principal_1), vec![]),
+            fake_neuron(6, Some(principal_1), vec![]),
+        ],
+        total_pages_available: None,
+    });
+    super::tick().await;
+
+    // Extra tick triggers check_neurons_limit with cumulative total → TooManyNeurons
+    super::tick().await;
+
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::Unsellable {
+            reason: UnsellableReason::CheckLimitFailed {
+                reason: LimitFailureReason::TooManyNeurons
+            }
+        },
+    });
+}
+
+// ---------------------------------------------------------------------------
+// test_subaccount_limit_across_multiple_identity_accounts
+// ---------------------------------------------------------------------------
+
+/// Verifies that `max_subaccounts_allowed` is enforced across **all** identity accounts,
+/// not just the one currently being fetched.
+///
+/// Setup (test settings: max_subaccounts_allowed = 5):
+///   - Account 0 (default, key 1): 3 sub-accounts.
+///   - Account 1 (numbered, key 2): 3 sub-accounts.
+///   Total: 6 > 5 → must transition to `Unsellable::CheckLimitFailed::TooManyAccounts`
+///   while processing account 1, even though account 1 alone is within the limit.
+#[tokio::test]
+async fn test_subaccount_limit_across_multiple_identity_accounts() {
+    use crate::test::tests::support::mocks::mock_identity_accounts_ok;
+    use common_canister_impl::components::identity::api::AccountInfo;
+    use common_canister_impl::components::nns_dap::api::AccountDetails;
+
+    drive_to_captured(
+        HT_STANDARD_CERT_EXPIRATION,
+        ht_get_test_deployer(),
+        HT_CAPTURED_IDENTITY_NUMBER,
+    )
+    .await;
+
+    // StartFetchAssets → GetIdentityAccounts
+    super::tick().await;
+
+    // Two identity accounts: default (None) + numbered (Some(1))
+    mock_identity_accounts_ok(vec![
+        AccountInfo {
+            account_number: None,
+            origin: "nns.ic0.app".to_string(),
+            last_used: None,
+            name: None,
+        },
+        AccountInfo {
+            account_number: Some(1),
+            origin: "nns.ic0.app".to_string(),
+            last_used: None,
+            name: Some("Account 1".to_string()),
+        },
+    ]);
+    super::tick().await;
+    // State: NeedPrepareDelegation (account 0)
+
+    // ---- Account 0: no neurons, 3 sub-accounts ----
+    mock_prepare_delegation_ok(TEST_DELEGATION_KEY_1.to_vec());
+    super::tick().await;
+
+    send_delegation_got(TEST_DELEGATION_KEY_1.to_vec());
+    // State: GetNeuronsIds
+
+    let principal_0 = get_holder_model(|_, model| model.get_delegation_controller().unwrap());
+
+    // No neurons → skip to GetAccountsInformation
+    mock_neuron_ids(vec![]);
+    super::tick().await;
+    // State: GetAccountsInformation
+
+    // 3 sub-accounts for account 0 (within limit on its own)
+    let zero_subaccount = [0u8; 32];
+    let sub_accounts_0: Vec<SubAccountDetails> = (1u8..4)
+        .map(|i| {
+            let mut sa = zero_subaccount;
+            sa[31] = i;
+            SubAccountDetails {
+                name: format!("Sub{i}"),
+                sub_account: sa.to_vec().into(),
+                account_identifier: AccountIdentifier::new(&principal_0, &Subaccount(sa)).to_hex(),
+            }
+        })
+        .collect();
+    mock_account_ok(AccountDetails {
+        principal: principal_0,
+        account_identifier: AccountIdentifier::new(&principal_0, &Subaccount(zero_subaccount))
+            .to_hex(),
+        hardware_wallet_accounts: vec![],
+        sub_accounts: sub_accounts_0,
+    });
+    super::tick().await;
+    // State: GetAccountsBalances → drain
+    while get_holder_model(|_, model| {
+        matches!(
+            &model.state.value,
+            HolderState::Holding {
+                sub_state: HoldingState::FetchAssets {
+                    fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                        sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                            sub_state: FetchNnsAssetsState::GetAccountsBalances,
+                            ..
+                        },
+                    },
+                    ..
+                }
+            }
+        )
+    }) {
+        super::tick().await;
+    }
+    // State: FinishCurrentNnsAccountFetch
+    super::tick().await;
+    // State: NeedPrepareDelegation (account 1)
+
+    // ---- Account 1: no neurons, 3 sub-accounts — total = 3 + 3 = 6 > 5 ----
+    mock_prepare_delegation_ok(TEST_DELEGATION_KEY_2.to_vec());
+    super::tick().await;
+
+    send_delegation_got(TEST_DELEGATION_KEY_2.to_vec());
+    // State: GetNeuronsIds
+
+    let principal_1 = get_holder_model(|_, model| model.get_delegation_controller().unwrap());
+
+    // No neurons → skip to GetAccountsInformation
+    mock_neuron_ids(vec![]);
+    super::tick().await;
+    // State: GetAccountsInformation
+
+    // 3 sub-accounts for account 1 → cumulative total = 6, exceeds limit of 5
+    let sub_accounts_1: Vec<SubAccountDetails> = (1u8..4)
+        .map(|i| {
+            let mut sa = zero_subaccount;
+            sa[31] = i + 10; // distinct from account 0 sub-accounts
+            SubAccountDetails {
+                name: format!("Sub{i}"),
+                sub_account: sa.to_vec().into(),
+                account_identifier: AccountIdentifier::new(&principal_1, &Subaccount(sa)).to_hex(),
+            }
+        })
+        .collect();
+    mock_account_ok(AccountDetails {
+        principal: principal_1,
+        account_identifier: AccountIdentifier::new(&principal_1, &Subaccount(zero_subaccount))
+            .to_hex(),
+        hardware_wallet_accounts: vec![],
+        sub_accounts: sub_accounts_1,
+    });
+    super::tick().await;
+
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::Unsellable {
+            reason: UnsellableReason::CheckLimitFailed {
+                reason: LimitFailureReason::TooManyAccounts
             }
         },
     });

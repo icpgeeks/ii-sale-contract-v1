@@ -131,7 +131,25 @@ pub(crate) async fn process(
 }
 
 fn check_neurons_limit(env: &Environment, lock: &HolderLock) -> Result<(), HolderProcessingError> {
-    let neurons_count = get_holder_model(|_, model| {
+    // Count neurons in already-completed slots (previously fetched identity accounts).
+    let saved_neurons_count = get_holder_model(|_, model| {
+        model
+            .fetching_assets
+            .as_ref()
+            .and_then(|fa| fa.nns_assets.as_ref())
+            .map(|slots| {
+                slots
+                    .iter()
+                    .filter_map(|slot| slot.assets.as_ref())
+                    .filter_map(|assets| assets.controlled_neurons.as_ref())
+                    .map(|neurons| neurons.value.len())
+                    .sum::<usize>()
+            })
+            .unwrap_or(0)
+    });
+
+    // Quick upper-bound check: current buffer (all neurons, including not-yet-info-loaded).
+    let current_neurons_count = get_holder_model(|_, model| {
         model
             .fetching_nns_assets
             .as_ref()
@@ -139,11 +157,13 @@ fn check_neurons_limit(env: &Environment, lock: &HolderLock) -> Result<(), Holde
             .map(|neurons| neurons.value.len())
             .unwrap_or(0)
     });
-    if neurons_count <= env.get_settings().max_neurons_allowed {
+    if saved_neurons_count + current_neurons_count <= env.get_settings().max_neurons_allowed {
         return Ok(());
     }
-    // check only non-zero neurons
-    let non_zero_neurons_count = get_holder_model(|_, model| {
+
+    // Precise check: count only non-zero neurons (those with info already loaded)
+    // in the current buffer; saved slots already contain only non-zero neurons.
+    let current_non_zero_count = get_holder_model(|_, model| {
         model
             .fetching_nns_assets
             .as_ref()
@@ -157,12 +177,13 @@ fn check_neurons_limit(env: &Environment, lock: &HolderLock) -> Result<(), Holde
             })
             .unwrap_or(0)
     });
-    if non_zero_neurons_count <= env.get_settings().max_neurons_allowed {
+    let total_non_zero_count = saved_neurons_count + current_non_zero_count;
+    if total_non_zero_count <= env.get_settings().max_neurons_allowed {
         return Ok(());
     }
     log_info!(
         env,
-        "Neurons: excessive count detected — {non_zero_neurons_count}."
+        "Neurons: excessive count detected — {total_non_zero_count} total across all identity accounts (saved: {saved_neurons_count}, current: {current_non_zero_count})."
     );
     update_holder(
         lock,
