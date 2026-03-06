@@ -4,7 +4,7 @@ import {InfoAlert} from 'frontend/src/components/widgets/alert/InfoAlert';
 import {WarningAlert} from 'frontend/src/components/widgets/alert/WarningAlert';
 import {PrimaryButton} from 'frontend/src/components/widgets/button/PrimaryButton';
 import {PanelCard} from 'frontend/src/components/widgets/PanelCard';
-import {useIdentityHolderContext} from 'frontend/src/context/identityHolder/IdentityHolderProvider';
+import {useIdentityHolderContext, useIdentityHolderContextSafe} from 'frontend/src/context/identityHolder/IdentityHolderProvider';
 import {useIdentityHolderLinkedAssetsContext} from 'frontend/src/context/identityHolder/state/holding/IdentityHolderLinkedAssetsProvider';
 import {i18} from 'frontend/src/i18';
 import {ReleasePanelHeader} from '../../../common/ReleasePanelHeader';
@@ -81,7 +81,8 @@ const RestartReleaseIdentityButtonContainerWrapper = () => {
 
 export const MultipleAccountsHint = () => {
     const linkedAssets = useIdentityHolderLinkedAssetsContext();
-    if (linkedAssets.type == 'assets' && linkedAssets.identityAccounts.length > 1) {
+    const {isCompletedSaleDealBuyer} = useIdentityHolderContextSafe();
+    if (isCompletedSaleDealBuyer && linkedAssets.type == 'assets' && linkedAssets.identityAccounts.length > 1) {
         return <InfoAlert message={i18.holder.state.release.checkingAccessFromOwnerAuthnMethod.multipleAccountsHint()} />;
     }
     return null;
