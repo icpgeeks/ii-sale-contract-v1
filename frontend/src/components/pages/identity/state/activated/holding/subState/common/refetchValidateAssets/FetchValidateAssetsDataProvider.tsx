@@ -1,6 +1,5 @@
 import {fromNullable, fromNullishNullable, isNullish, nonNullish} from '@dfinity/utils';
 import {useIdentityHolderAssetsContext} from 'frontend/src/context/identityHolder/state/holding/IdentityHolderAssetsProvider';
-import {isSlotFullyFetched} from 'frontend/src/context/identityHolder/state/holding/useIdentityHolderLinkedAssetsValue';
 import {useIdentityHolderStateContext} from 'frontend/src/context/identityHolder/state/IdentityHolderStateProvider';
 import {applicationLogger} from 'frontend/src/context/logger/logger';
 import {exhaustiveCheckFailedMessage} from 'frontend/src/context/logger/loggerConstants';
@@ -208,29 +207,48 @@ const getStepFromFetchIdentityAccountsState = (state: FetchIdentityAccountsNnsAs
         case 'FetchNnsAssetsState': {
             const slots = nonNullish(fetchingAssets) ? (fromNullable(fetchingAssets.nns_assets) ?? []) : [];
             const totalAccounts = slots.length;
-            const completedCount = slots.filter(isSlotFullyFetched).length;
-            const currentAccountIndex = Math.min(completedCount + 1, totalAccounts);
             const currentAccNum = fromNullable(union.state.identity_account_number);
             const foundSlotIndex = nonNullish(currentAccNum)
                 ? slots.findIndex((s) => fromNullable(s.identity_account_number) === currentAccNum)
                 : slots.findIndex((s) => isNullish(fromNullable(s.identity_account_number)));
             if (foundSlotIndex < 0) {
-                applicationLogger.log('Slot not found in fetchingAssets for current identity_account_number, falling back to completedCount', {currentAccNum, totalAccounts, completedCount});
+                applicationLogger.log('Slot not found in fetchingAssets for current identity_account_number while calculating currentAccountIndex for FetchNnsAssetsState, falling back to 0', {
+                    currentAccNum,
+                    foundSlotIndex,
+                    slots,
+                    union
+                });
             }
+
+            const completedCount = Math.max(foundSlotIndex, 0);
+            const currentAccountIndex = Math.min(completedCount + 1, totalAccounts);
+
             const slotIndex = foundSlotIndex >= 0 ? foundSlotIndex : completedCount;
             const innerStep = getStepFromNNS(union.state.sub_state, fetchingAssets, slotIndex);
+            if (innerStep.type === 'accountBalances' && innerStep.accountsLeft === 0) {
+                applicationLogger.debug('All accounts have balances in FetchNnsAssetsState, overriding innerStep to finishCurrentNnsAccountFetch', {currentAccNum, currentAccountIndex, totalAccounts});
+                return {type: 'fetchingNnsAssetsForAccount', currentAccountIndex, totalAccounts, innerStep: {type: 'finishCurrentNnsAccountFetch'}};
+            }
             return {type: 'fetchingNnsAssetsForAccount', currentAccountIndex, totalAccounts, innerStep};
         }
         case 'FinishCurrentNnsAccountFetch': {
             const slots = nonNullish(fetchingAssets) ? (fromNullable(fetchingAssets.nns_assets) ?? []) : [];
             const totalAccounts = slots.length;
-            const completedCount = slots.filter(isSlotFullyFetched).length;
-            const accountsLeft = totalAccounts - completedCount;
-            if (accountsLeft > 0) {
-                const currentAccountIndex = Math.min(completedCount + 1, totalAccounts);
-                return {type: 'fetchingNnsAssetsForAccount', currentAccountIndex, totalAccounts, innerStep: {type: 'finishCurrentNnsAccountFetch'}};
+            const currentAccNum = fromNullable(union.state.identity_account_number);
+            const foundSlotIndex = nonNullish(currentAccNum)
+                ? slots.findIndex((s) => fromNullable(s.identity_account_number) === currentAccNum)
+                : slots.findIndex((s) => isNullish(fromNullable(s.identity_account_number)));
+            if (foundSlotIndex < 0) {
+                applicationLogger.log(
+                    'Slot not found in fetchingAssets for current identity_account_number while calculating currentAccountIndex for FinishCurrentNnsAccountFetch, falling back to 0',
+                    {currentAccNum, foundSlotIndex, slots, union}
+                );
             }
-            return {type: 'assetsFetchedButNotChecked'};
+
+            const completedCount = Math.max(foundSlotIndex, 0);
+            const currentAccountIndex = Math.min(completedCount + 1, totalAccounts);
+
+            return {type: 'fetchingNnsAssetsForAccount', currentAccountIndex, totalAccounts, innerStep: {type: 'finishCurrentNnsAccountFetch'}};
         }
         default: {
             const exhaustiveCheck: never = type;
@@ -293,13 +311,13 @@ const getHoldingStepNeurons = (fetchingAssets: HolderAssets | undefined, slotInd
 };
 
 const getHoldingStepAccountBalances = (fetchingAssets: HolderAssets | undefined, slotIndex: number): NnsAssetsStepAccountBalances => {
-    const result: NnsAssetsStepAccountBalances = {type: 'accountBalances', accountsLeft: 0};
     if (nonNullish(fetchingAssets)) {
         const slot = (fromNullable(fetchingAssets.nns_assets) ?? [])[slotIndex];
         const slotAssets = nonNullish(slot) ? fromNullishNullable(slot.assets) : undefined;
         if (nonNullish(slotAssets)) {
             const accountsInformation: AccountsInformation | undefined = fromNullishNullable(fromNullable(slotAssets.accounts)?.value);
             if (nonNullish(accountsInformation)) {
+                const result: NnsAssetsStepAccountBalances = {type: 'accountBalances', accountsLeft: 0};
                 const mainAccountInformation = fromNullable(accountsInformation.main_account_information);
                 const hasMainAccountBalance = nonNullish(fromNullishNullable(mainAccountInformation?.balance));
                 if (!hasMainAccountBalance) {
@@ -309,8 +327,9 @@ const getHoldingStepAccountBalances = (fetchingAssets: HolderAssets | undefined,
                     return isNullish(fromNullishNullable(subAccount.sub_account_information.balance));
                 }).length;
                 result.accountsLeft += numberOfSubAccountsWithoutBalance;
+                return result;
             }
         }
     }
-    return result;
+    return {type: 'accountBalances', accountsLeft: -1};
 };

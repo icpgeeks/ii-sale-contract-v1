@@ -5,16 +5,7 @@ import {getAccountIdentifierHexFromByteArraySafe} from 'frontend/src/utils/ic/ac
 import {useCallback, useMemo} from 'react';
 
 import {applicationLogger} from 'frontend/src/context/logger/logger';
-import type {
-    AccountInformation,
-    AccountsInformation,
-    HolderAssets,
-    IdentityAccountNnsAssets,
-    NeuronAsset,
-    NeuronInformation,
-    NnsHolderAssets,
-    SubAccountInformation
-} from 'src/declarations/contract/contract.did';
+import type {AccountInformation, AccountsInformation, HolderAssets, NeuronAsset, NeuronInformation, NnsHolderAssets, SubAccountInformation} from 'src/declarations/contract/contract.did';
 import {useIdentityHolderContext} from '../../IdentityHolderProvider';
 
 type ContextNoAssets = {
@@ -440,44 +431,4 @@ const getControlledNeurons = (controlledNeurons: NnsHolderAssets['controlled_neu
             earliestTimestampMillis
         }
     };
-};
-
-/**
- * Returns true only when all layers of a fetching_assets slot are fully populated:
- * slot.assets → controlled_neurons → accounts → AccountsInformation → main_account_information
- * Mirrors the completeness checks in useIdentityHolderLinkedAssetsValue.
- */
-export const isSlotFullyFetched = (slot: IdentityAccountNnsAssets): boolean => {
-    const nnsAssets = fromNullishNullable(slot.assets);
-    if (isNullish(nnsAssets)) {
-        return false;
-    }
-    const controlledNeurons = fromNullable(nnsAssets.controlled_neurons);
-    if (isNullish(controlledNeurons)) {
-        return false;
-    }
-    // If there are neurons, all of them must have info populated
-    if (controlledNeurons.value.some((n) => isNullish(fromNullable(n.info)))) {
-        return false;
-    }
-    const accounts = fromNullable(nnsAssets.accounts);
-    if (isNullish(accounts)) {
-        return false;
-    }
-    // accounts.value = None means no accounts — valid "fully fetched" state
-    const accountsInformation = fromNullable(accounts.value);
-    if (isNullish(accountsInformation)) {
-        return true;
-    }
-    const mainAccountInfo = fromNullable(accountsInformation.main_account_information);
-    if (isNullish(mainAccountInfo)) {
-        return false;
-    }
-    if (isNullish(fromNullishNullable(mainAccountInfo.balance))) {
-        return false;
-    }
-    if (accountsInformation.sub_accounts.some((sa) => isNullish(fromNullishNullable(sa.sub_account_information.balance)))) {
-        return false;
-    }
-    return true;
 };
