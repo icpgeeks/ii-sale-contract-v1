@@ -349,7 +349,7 @@ checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
 
 [[package]]
 name = "contract_canister_api"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "candid",
  "common_canister_types",
@@ -359,7 +359,7 @@ dependencies = [
 
 [[package]]
 name = "contract_canister_candid"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "candid",
  "common_canister_api",
@@ -370,7 +370,7 @@ dependencies = [
 
 [[package]]
 name = "contract_canister_impl"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "async-trait",
  "candid",

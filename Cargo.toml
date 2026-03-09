@@ -6,6 +6,10 @@ members = [
     "backend/impl",
 ]
 
+[workspace.package]
+version = "0.0.2"
+edition = "2021"
+
 [workspace.dependencies]
 common_canister_types = { git = "https://github.com/geekfactory-core/common.git", tag = "0.0.2" }
 common_canister_api = { git = "https://github.com/geekfactory-core/common.git", tag = "0.0.2" }
