@@ -66,7 +66,7 @@ const rawI18 = {
     toolbar: {
         title: {
             first: 'INTERNET IDENTITY',
-            second: 'SALE CONTRACT v1.0'
+            second: 'SALE CONTRACT v1.1'
         },
         menu: {
             home: 'Home',
@@ -274,6 +274,7 @@ FEATURES
 - Receives 100-day certificate providing full immutability while valid.
 - Takes temporary exclusive custody and control of Internet Identity by removing all other passkeys, including seed phrase.
 - Removes all neuron hotkeys to eliminate residual control by seller.
+- Supports Internet Identities with multiple accounts.
 - Detects and displays ICP accounts and neurons from NNS Dapp.
 - Enforces mandatory 30-day cooldown period for all active sessions to expire.
 - Validates ICP accounts and neurons after cooldown.
