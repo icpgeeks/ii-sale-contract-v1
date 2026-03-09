@@ -28,7 +28,7 @@ bin/repro-build-in-docker.sh
 
 ```bash
 Built wasm hash and size:
-target/release/reproducible/contract_canister_impl-opt.wasm a1d8296cc73c049962afafe4ac69724f967b63a25b3788b37a86ea685f4c0f78 - 7315002
+target/release/reproducible/contract_canister_impl-opt.wasm cda24a031fe806b834860667dec7c6aa462f2619b75488f322a6bf5e9331eb8d - 7314977
 ```
 
 4. Fetch the hash of the contract canister and compare it with the hash from the previous step:
