@@ -1,10 +1,10 @@
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
+import { fileURLToPath } from 'node:url';
 import license from 'rollup-plugin-license';
-import {defineConfig} from 'vite';
+import { defineConfig } from 'vite';
 import checker from 'vite-plugin-checker';
-import {nodePolyfills} from 'vite-plugin-node-polyfills';
+import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import svgr from 'vite-plugin-svgr';
 
 const localReplicaPort = 8080;
@@ -19,7 +19,7 @@ export default defineConfig(({mode}) => {
     const isTest = mode === 'test';
     const isProd = mode === 'production';
     const projectRootFolderPath = path.resolve(__dirname, basePathToRoot);
-    const tsconfigPath = isProd ? 'tsconfig.prod.json' : isTest ? 'tsconfig.test.json' : 'tsconfig.dev.json';
+    const tsconfigPath = isProd ? 'tsconfig.production.json' : isTest ? 'tsconfig.test.json' : 'tsconfig.dev.json';
     return {
         logLevel: 'info',
         build: {
