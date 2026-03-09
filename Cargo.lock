@@ -265,8 +265,8 @@ dependencies = [
 
 [[package]]
 name = "common_canister_api"
-version = "0.0.1"
-source = "git+https://github.com/geekfactory-core/common.git?branch=feature%2Fii-multi-account-support#e7d7a1169041327e439deabe92f9251bd22e4e19"
+version = "0.0.2"
+source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.2#d1bb1f38ce0620991162a3b8269bcc66164fa70d"
 dependencies = [
  "candid",
  "common_canister_types",
@@ -276,8 +276,8 @@ dependencies = [
 
 [[package]]
 name = "common_canister_impl"
-version = "0.0.1"
-source = "git+https://github.com/geekfactory-core/common.git?branch=feature%2Fii-multi-account-support#e7d7a1169041327e439deabe92f9251bd22e4e19"
+version = "0.0.2"
+source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.2#d1bb1f38ce0620991162a3b8269bcc66164fa70d"
 dependencies = [
  "async-trait",
  "candid",
@@ -307,8 +307,8 @@ dependencies = [
 
 [[package]]
 name = "common_canister_types"
-version = "0.0.1"
-source = "git+https://github.com/geekfactory-core/common.git?branch=feature%2Fii-multi-account-support#e7d7a1169041327e439deabe92f9251bd22e4e19"
+version = "0.0.2"
+source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.2#d1bb1f38ce0620991162a3b8269bcc66164fa70d"
 dependencies = [
  "candid",
  "serde",
@@ -317,8 +317,8 @@ dependencies = [
 
 [[package]]
 name = "common_contract_api"
-version = "0.0.1"
-source = "git+https://github.com/geekfactory-core/common.git?branch=feature%2Fii-multi-account-support#e7d7a1169041327e439deabe92f9251bd22e4e19"
+version = "0.0.2"
+source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.2#d1bb1f38ce0620991162a3b8269bcc66164fa70d"
 dependencies = [
  "candid",
  "common_canister_types",
@@ -328,8 +328,8 @@ dependencies = [
 
 [[package]]
 name = "common_embed_assets"
-version = "0.0.1"
-source = "git+https://github.com/geekfactory-core/common.git?branch=feature%2Fii-multi-account-support#e7d7a1169041327e439deabe92f9251bd22e4e19"
+version = "0.0.2"
+source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.2#d1bb1f38ce0620991162a3b8269bcc66164fa70d"
 dependencies = [
  "brotli",
  "flate2",
@@ -1357,8 +1357,8 @@ dependencies = [
 
 [[package]]
 name = "referral_c2c_client"
-version = "0.0.1"
-source = "git+https://github.com/geekfactory-core/common.git?branch=feature%2Fii-multi-account-support#e7d7a1169041327e439deabe92f9251bd22e4e19"
+version = "0.0.2"
+source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.2#d1bb1f38ce0620991162a3b8269bcc66164fa70d"
 dependencies = [
  "candid",
  "ic-cdk",
@@ -1368,8 +1368,8 @@ dependencies = [
 
 [[package]]
 name = "referral_canister_api"
-version = "0.0.1"
-source = "git+https://github.com/geekfactory-core/common.git?branch=feature%2Fii-multi-account-support#e7d7a1169041327e439deabe92f9251bd22e4e19"
+version = "0.0.2"
+source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.2#d1bb1f38ce0620991162a3b8269bcc66164fa70d"
 dependencies = [
  "candid",
  "common_canister_types",
