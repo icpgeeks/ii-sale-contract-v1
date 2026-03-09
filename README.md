@@ -1,6 +1,12 @@
-# Internet Identity Sale Contract v1.0
+# Internet Identity Sale Contract v1.1
 
 This single-use smart contract enables trustless sale of an entire Internet Identity along with all linked assets, accounts, permissions, and dapp accesses. It provides key functionality like listing, offers, validation, ownership transfer, and payments. The contract is issued with a cryptographic certificate, which makes it fully immutable for the entire certification period.
+
+## What's New
+
+### Version 1.1
+
+- Added support for Internet Identities with multiple accounts.
 
 ## Key Parameters
 
@@ -21,6 +27,7 @@ This single-use smart contract enables trustless sale of an entire Internet Iden
 - Takes temporary exclusive custody and control of Internet Identity by removing all other passkeys, including seed phrase.
 - Removes all neuron hotkeys to eliminate residual control by seller.
 - Detects and displays ICP accounts and neurons from NNS Dapp.
+- Supports Internet Identities with multiple accounts.
 - Enforces mandatory 30-day cooldown period for all active sessions to expire.
 - Validates ICP accounts and neurons after cooldown.
 - Blocks sale if total value decreases after validation.

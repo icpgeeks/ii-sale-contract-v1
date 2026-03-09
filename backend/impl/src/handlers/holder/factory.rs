@@ -1,6 +1,7 @@
 use crate::components::Environment;
 use crate::handlers::holder::states::{
-    exit_and_register_holder_authn_method, register_holder_authn_method_session,
+    check_holder_contract_principals, exit_and_register_holder_authn_method,
+    get_holder_contract_accounts, register_holder_authn_method_session,
 };
 use contract_canister_api::types::holder::{CaptureState, HolderState::*, ReleaseState};
 
@@ -12,8 +13,8 @@ use crate::{
         check_confirmation_owner_registration_expiry, confirm_authn_method_registration,
         create_ecdsa_key, delete_holder_authn_method, delete_identity_authn_methods,
         enter_authn_method_registration_mode, exit_orphaned_registration_mode, finish_capture,
-        get_holder_contract_principal, obtain_identity_authn_methods, process_holding_state,
-        sleep_processing, start_capture, start_release,
+        obtain_identity_authn_methods, process_holding_state, sleep_processing, start_capture,
+        start_release,
     },
     processor_toolkit, read_state,
 };
@@ -52,8 +53,11 @@ fn get_capture_processor<'a>(capture_state: CaptureState) -> Processor<'a> {
         CaptureState::ExitAndRegisterHolderAuthnMethod { .. } => {
             processor_toolkit!(exit_and_register_holder_authn_method)
         }
-        CaptureState::GetHolderContractPrincipal { .. } => {
-            processor_toolkit!(get_holder_contract_principal)
+        CaptureState::GetHolderContractAccounts { .. } => {
+            processor_toolkit!(get_holder_contract_accounts)
+        }
+        CaptureState::CheckHolderContractPrincipals { .. } => {
+            processor_toolkit!(check_holder_contract_principals)
         }
         CaptureState::ObtainingIdentityAuthnMethods => {
             processor_toolkit!(obtain_identity_authn_methods)

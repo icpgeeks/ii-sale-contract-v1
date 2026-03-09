@@ -43,17 +43,21 @@ const ExportButton = () => {
     const {loggerEvents, feature} = useLoggerEventsProviderContext();
     const breakpoint = useBreakpoint();
     const onClick = useCallback(() => {
-        const lines = loggerEvents.map(safeSerializeLogEntry).map((entry) =>
-            jsonStringify({
-                uid: entry.uid,
-                timestamp: entry.timestamp,
-                date: formatDateTime(entry.timestamp),
-                level: entry.level,
-                prefix: entry.prefix,
-                message: entry.message,
-                args: entry.args
-            })
-        );
+        const lines: Array<string> = [];
+        for (let i = loggerEvents.length - 1; i >= 0; i--) {
+            const entry = safeSerializeLogEntry(loggerEvents[i]);
+            lines.push(
+                jsonStringify({
+                    uid: entry.uid,
+                    timestamp: entry.timestamp,
+                    date: formatDateTime(entry.timestamp),
+                    level: entry.level,
+                    prefix: entry.prefix,
+                    message: entry.message,
+                    args: entry.args
+                })
+            );
+        }
         downloadStringsAsFile(lines);
     }, [loggerEvents]);
 

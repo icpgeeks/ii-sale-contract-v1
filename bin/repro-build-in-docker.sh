@@ -51,14 +51,14 @@ fi
 HOST_TARGET_DIR=target/release/reproducible
 mkdir -p $HOST_TARGET_DIR
 header "Building $MODULE with Docker"
-docker build --progress=plain --build-context module=. -t reprocanister .
+docker build ${ADDITIONAL_DOCKER_ARGS:-} --progress=plain --build-context module=$(pwd) -t reprocanister .
 docker create --name tmp-reprocontainer reprocanister
 docker cp tmp-reprocontainer:/canister/target/wasm32-unknown-unknown/release/${MODULE}_canister_impl-opt.wasm $HOST_TARGET_DIR
 docker rm tmp-reprocontainer
 
-if ls target/release/reproducible/*-opt.wasm 1>/dev/null 2>&1; then
+if ls target/release/reproducible/*.wasm 1>/dev/null 2>&1; then
   echo "Built wasm hash and size:"
-  for file in target/release/reproducible/*-opt.wasm; do
+  for file in target/release/reproducible/*.wasm; do
       fhash=$(sha256sum < $file)
       fsize=$(wc -c < $file)
       echo $file $fhash $fsize

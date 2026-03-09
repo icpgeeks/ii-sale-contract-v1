@@ -15,6 +15,26 @@ use super::{
     build_ic_agent_request_with_check_delegation, execute_ic_agent_request, get_holder_model,
 };
 
+/// Count subaccounts already saved in completed identity account slots.
+fn count_saved_subaccounts() -> usize {
+    get_holder_model(|_, model| {
+        model
+            .fetching_assets
+            .as_ref()
+            .and_then(|fa| fa.nns_assets.as_ref())
+            .map(|slots| {
+                slots
+                    .iter()
+                    .filter_map(|slot| slot.assets.as_ref())
+                    .filter_map(|assets| assets.accounts.as_ref())
+                    .filter_map(|accounts| accounts.value.as_ref())
+                    .map(|info| info.sub_accounts.len())
+                    .sum::<usize>()
+            })
+            .unwrap_or(0)
+    })
+}
+
 pub(crate) async fn process(
     env: &Environment,
     lock: &HolderLock,
@@ -64,10 +84,14 @@ pub(crate) async fn process(
                     .ok()
                     })
                 .collect::<Vec<SubAccountInformation>>();
-            if sub_accounts.len() > env.get_settings().max_subaccounts_allowed {
+            let saved_subaccounts_count = count_saved_subaccounts();
+            let total_subaccounts_count = saved_subaccounts_count + sub_accounts.len();
+            if total_subaccounts_count > env.get_settings().max_subaccounts_allowed {
                 log_error!(
                     env,
-                    "Subaccounts: too many detected: {}.",
+                    "Subaccounts: too many detected: {} total across all identity accounts (saved: {}, current: {}).",
+                    total_subaccounts_count,
+                    saved_subaccounts_count,
                     sub_accounts.len()
                 );
                 update_holder(

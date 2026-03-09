@@ -3,8 +3,9 @@ use common_canister_impl::components::nns::api::{
     RemoveHotKey,
 };
 use contract_canister_api::types::holder::{
-    FetchAssetsEvent, FetchAssetsState, FetchNnsAssetsState, HolderProcessingError,
-    HolderProcessingEvent, HolderState, HoldingProcessingEvent, HoldingState,
+    FetchAssetsEvent, FetchAssetsState, FetchIdentityAccountsNnsAssetsState, FetchNnsAssetsState,
+    HolderProcessingError, HolderProcessingEvent, HolderState, HoldingProcessingEvent,
+    HoldingState,
 };
 
 use crate::components::Environment;
@@ -22,27 +23,34 @@ pub(crate) async fn process(
     env: &Environment,
     lock: &HolderLock,
 ) -> Result<ProcessingResult, HolderProcessingError> {
-    let hotkey_candidate = get_holder_model(|_, model| {
-        if let HolderState::Holding {
-            sub_state:
-                HoldingState::FetchAssets {
-                    fetch_assets_state:
-                        FetchAssetsState::FetchNnsAssetsState {
-                            sub_state:
-                                FetchNnsAssetsState::DeletingNeuronsHotkeys { neuron_hotkeys },
-                        },
-                    ..
-                },
-        } = &model.state.value
-        {
-            Ok(neuron_hotkeys
-                .first()
-                .map(|(neuron_id, hot_key)| (*neuron_id, *hot_key.first().unwrap())))
-        } else {
-            Err("Invalid state for deleting neuron hot keys".to_string())
-        }
-    })
-    .map_err(|error| HolderProcessingError::InternalError { error })?;
+    let hotkey_candidate =
+        get_holder_model(|_, model| {
+            if let HolderState::Holding {
+                sub_state:
+                    HoldingState::FetchAssets {
+                        fetch_assets_state:
+                            FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                                sub_state:
+                                    FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                                        sub_state:
+                                            FetchNnsAssetsState::DeletingNeuronsHotkeys {
+                                                neuron_hotkeys,
+                                            },
+                                        ..
+                                    },
+                            },
+                        ..
+                    },
+            } = &model.state.value
+            {
+                Ok(neuron_hotkeys
+                    .first()
+                    .map(|(neuron_id, hot_key)| (*neuron_id, *hot_key.first().unwrap())))
+            } else {
+                Err("Invalid state for deleting neuron hot keys".to_string())
+            }
+        })
+        .map_err(|error| HolderProcessingError::InternalError { error })?;
     match hotkey_candidate {
         None => {
             log_info!(env, "Neurons: no more hot keys to delete.");

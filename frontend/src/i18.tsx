@@ -66,7 +66,7 @@ const rawI18 = {
     toolbar: {
         title: {
             first: 'INTERNET IDENTITY',
-            second: 'SALE CONTRACT v1.0'
+            second: 'SALE CONTRACT v1.1'
         },
         menu: {
             home: 'Home',
@@ -274,6 +274,7 @@ FEATURES
 - Receives 100-day certificate providing full immutability while valid.
 - Takes temporary exclusive custody and control of Internet Identity by removing all other passkeys, including seed phrase.
 - Removes all neuron hotkeys to eliminate residual control by seller.
+- Supports Internet Identities with multiple accounts.
 - Detects and displays ICP accounts and neurons from NNS Dapp.
 - Enforces mandatory 30-day cooldown period for all active sessions to expire.
 - Validates ICP accounts and neurons after cooldown.
@@ -529,6 +530,18 @@ This description does not cover all possible risks, limitations, or edge cases. 
                                 part2: {
                                     closed: ', and transferred it to your device.',
                                     notClosed: '.'
+                                },
+                                multipleAccountsHint: {
+                                    closed: () => (
+                                        <>
+                                            This Internet Identity has <b>multiple NNS accounts</b>. Log in with each account to view all assets.
+                                        </>
+                                    ),
+                                    notClosed: () => (
+                                        <>
+                                            This Internet Identity has <b>multiple NNS accounts</b>. After transferring it to your device, log in with each account to view all assets.
+                                        </>
+                                    )
                                 }
                             }
                         },
@@ -790,6 +803,11 @@ This description does not cover all possible risks, limitations, or edge cases. 
                     }
                 },
                 fetchingAssets: {
+                    fetchingIdentityAccounts: 'Fetching Internet Identity accounts',
+                    fetchingNnsAssets: {
+                        simple: 'Fetching NNS assets',
+                        detailed: (current: number, total: number) => `(account ${current} of ${total})`
+                    },
                     connectingToNNS: 'Connecting to NNS',
                     fetchingNeurons: {
                         simple: 'Fetching neurons',
@@ -882,7 +900,12 @@ This description does not cover all possible risks, limitations, or edge cases. 
                     warning:
                         'After you click Confirm, this contract will be removed from your Internet Identity passkey list. If you confirm without access to your Internet Identity, you will permanently lose it.',
                     warningUndone: 'THIS CANNOT BE UNDONE!',
-                    hint: 'Consider creating multiple access methods to secure this Internet Identity before confirming.',
+                    multipleAccessMethodsHint: 'Consider creating multiple access methods to secure this Internet Identity before confirming.',
+                    multipleAccountsHint: () => (
+                        <>
+                            This Internet Identity has <b>multiple NNS accounts</b>. Log in with each account to view all assets before confirming.
+                        </>
+                    ),
                     form: {
                         agreementCheckbox: 'I confirm that I am able to access this Internet Identity.'
                     }

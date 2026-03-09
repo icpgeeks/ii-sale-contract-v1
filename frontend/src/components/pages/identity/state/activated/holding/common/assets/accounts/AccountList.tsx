@@ -1,4 +1,3 @@
-import {isNullish} from '@dfinity/utils';
 import {List} from 'antd';
 import type {PaginationConfig} from 'antd/es/pagination';
 import {DataEmptyStub} from 'frontend/src/components/widgets/stub/DataEmptyStub';
@@ -24,13 +23,11 @@ export const AccountList = () => {
     const rowKey = useCallback((record: ItemType) => record.accountIdentifierHex, []);
 
     const dataSource: Array<ItemType> = useMemo(() => {
-        if (linkedAssets.type != 'assets' || isNullish(linkedAssets.accounts)) {
+        if (linkedAssets.type != 'assets') {
             return [];
         }
 
-        const result: Array<ItemType> = [linkedAssets.accounts.mainAccount, ...linkedAssets.accounts.subAccounts];
-
-        return result;
+        return linkedAssets.allAccounts;
     }, [linkedAssets]);
 
     const pagination = useDefaultPaginationConfig(paginationConfig);

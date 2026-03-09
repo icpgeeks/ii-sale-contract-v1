@@ -1,69 +1,52 @@
-import {describe, expect, it} from 'vitest';
-import {millisToTime} from './utils';
+import {getDurationTillUTCMillisUnsafe} from 'frontend/src/utils/core/date/duration';
+import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {calculateRemainingTime, millisToTime} from './utils';
 
-describe('millisToTime', () => {
-    it('should convert 0 milliseconds to 00:00', () => {
-        const result = millisToTime(0);
-        expect(result).toEqual({minutes: '00', seconds: '00'});
+vi.mock('frontend/src/utils/core/date/duration');
+
+describe('utils', () => {
+    describe('millisToTime', () => {
+        it.each([
+            {millis: 0, expected: {minutes: '00', seconds: '00'}},
+            {millis: 1000, expected: {minutes: '00', seconds: '01'}},
+            {millis: 5000, expected: {minutes: '00', seconds: '05'}},
+            {millis: 60000, expected: {minutes: '01', seconds: '00'}},
+            {millis: 90000, expected: {minutes: '01', seconds: '30'}},
+            {millis: 125000, expected: {minutes: '02', seconds: '05'}},
+            {millis: 300000, expected: {minutes: '05', seconds: '00'}},
+            {millis: 600000, expected: {minutes: '10', seconds: '00'}},
+            {millis: 3661000, expected: {minutes: '61', seconds: '01'}},
+            {millis: 5999000, expected: {minutes: '99', seconds: '59'}},
+            {millis: 7200000, expected: {minutes: '120', seconds: '00'}},
+            {millis: 1999, expected: {minutes: '00', seconds: '01'}},
+            {millis: 999, expected: {minutes: '00', seconds: '00'}}
+        ])('converts $millis ms → $expected', ({millis, expected}) => {
+            expect(millisToTime(millis)).toEqual(expected);
+        });
     });
 
-    it('should convert 1000 milliseconds to 00:01', () => {
-        const result = millisToTime(1000);
-        expect(result).toEqual({minutes: '00', seconds: '01'});
-    });
+    describe('calculateRemainingTime', () => {
+        beforeEach(() => {
+            vi.clearAllMocks();
+        });
 
-    it('should convert 60000 milliseconds (1 minute) to 01:00', () => {
-        const result = millisToTime(60000);
-        expect(result).toEqual({minutes: '01', seconds: '00'});
-    });
+        it('returns undefined for undefined expiration', () => {
+            expect(calculateRemainingTime(undefined)).toBeUndefined();
+        });
 
-    it('should convert 90000 milliseconds (1 minute 30 seconds) to 01:30', () => {
-        const result = millisToTime(90000);
-        expect(result).toEqual({minutes: '01', seconds: '30'});
-    });
+        it('returns undefined when remaining millis is zero', () => {
+            vi.mocked(getDurationTillUTCMillisUnsafe).mockReturnValueOnce(0);
+            expect(calculateRemainingTime(12345n)).toBeUndefined();
+        });
 
-    it('should pad single digit seconds with leading zero', () => {
-        const result = millisToTime(5000);
-        expect(result).toEqual({minutes: '00', seconds: '05'});
-    });
+        it('returns undefined when remaining millis is negative', () => {
+            vi.mocked(getDurationTillUTCMillisUnsafe).mockReturnValueOnce(-1);
+            expect(calculateRemainingTime(12345n)).toBeUndefined();
+        });
 
-    it('should pad single digit minutes with leading zero', () => {
-        const result = millisToTime(300000);
-        expect(result).toEqual({minutes: '05', seconds: '00'});
-    });
-
-    it('should handle large values correctly', () => {
-        const result = millisToTime(3661000);
-        expect(result).toEqual({minutes: '61', seconds: '01'});
-    });
-
-    it('should handle 10 minutes exactly', () => {
-        const result = millisToTime(600000);
-        expect(result).toEqual({minutes: '10', seconds: '00'});
-    });
-
-    it('should handle 99 minutes and 59 seconds', () => {
-        const result = millisToTime(5999000);
-        expect(result).toEqual({minutes: '99', seconds: '59'});
-    });
-
-    it('should floor fractional seconds', () => {
-        const result = millisToTime(1999);
-        expect(result).toEqual({minutes: '00', seconds: '01'});
-    });
-
-    it('should handle small millisecond values that round to 0 seconds', () => {
-        const result = millisToTime(999);
-        expect(result).toEqual({minutes: '00', seconds: '00'});
-    });
-
-    it('should handle 2 hours correctly', () => {
-        const result = millisToTime(7200000);
-        expect(result).toEqual({minutes: '120', seconds: '00'});
-    });
-
-    it('should convert 125 seconds to 02:05', () => {
-        const result = millisToTime(125000);
-        expect(result).toEqual({minutes: '02', seconds: '05'});
+        it('returns formatted time when remaining millis is positive', () => {
+            vi.mocked(getDurationTillUTCMillisUnsafe).mockReturnValueOnce(90000);
+            expect(calculateRemainingTime(12345n)).toEqual({minutes: '01', seconds: '30'});
+        });
     });
 });

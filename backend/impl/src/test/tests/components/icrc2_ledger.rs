@@ -30,7 +30,7 @@ pub(crate) fn ht_approve_account(account: String, expires_at: TimestampMillis, t
     });
 }
 
-pub(crate) fn ht_get_account_allowance(account: Account) -> Allowance {
+fn ht_get_account_allowance(account: Account) -> Allowance {
     let account = to_account_identifier(&LedgerAccount::Account {
         owner: account.owner,
         subaccount: account.subaccount.map(|v| v.to_vec()),

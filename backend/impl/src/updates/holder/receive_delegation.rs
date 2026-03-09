@@ -7,14 +7,15 @@ use crate::{
     model::holder::UpdateHolderError,
 };
 
-use common_canister_impl::components::identity::api::{GetDelegationResponse, SignedDelegation};
+use common_canister_impl::components::identity::api::{AccountDelegationError, SignedDelegation};
 #[cfg(network = "local")]
 use common_canister_impl::handlers::ic_agent::{IcAgentRequest, QueryHttpSettings};
 use common_canister_types::TimestampNanos;
 use contract_canister_api::{
     receive_delegation::*,
     types::holder::{
-        DelegationData, DelegationState, FetchAssetsEvent, FetchAssetsState, HolderProcessingEvent,
+        DelegationData, DelegationState, FetchAssetsEvent, FetchAssetsState,
+        FetchIdentityAccountsNnsAssetsState, FetchNnsAssetsState, HolderProcessingEvent,
         HolderState, HoldingProcessingEvent, HoldingState, ObtainDelegationEvent,
     },
 };
@@ -42,14 +43,27 @@ pub(crate) async fn receive_delegation_int(
 
     let get_delegation_response = env
         .get_identity()
-        .decode_get_delegation_response(&get_delegation_response)
-        .unwrap();
+        .decode_get_account_delegation_response(&get_delegation_response)
+        .map_err(|reason| ReceiveDelegationError::DelegationWrong {
+            reason: format!("decode_get_account_delegation_response: {reason}"),
+        })?;
 
     let signed_delegation = match get_delegation_response {
-        GetDelegationResponse::NoSuchDelegation => {
+        Err(AccountDelegationError::NoSuchDelegation) => {
             return Err(ReceiveDelegationError::ResponseNotContainsDelegation);
         }
-        GetDelegationResponse::SignedDelegation(signed_delegation) => signed_delegation,
+        Err(AccountDelegationError::Unauthorized(principal)) => {
+            return Err(ReceiveDelegationError::DelegationWrong {
+                reason: format!(
+                    "get_account_delegation: unauthorized, principal: {}",
+                    principal.to_text()
+                ),
+            });
+        }
+        Err(AccountDelegationError::InternalCanisterError(reason)) => {
+            return Err(ReceiveDelegationError::DelegationWrong { reason });
+        }
+        Ok(signed_delegation) => signed_delegation,
     };
 
     let delegation_data = verify_delegation(env.as_ref(), &signed_delegation)?;
@@ -83,12 +97,20 @@ fn verify_delegation(
             sub_state:
                 HoldingState::FetchAssets {
                     fetch_assets_state:
-                        FetchAssetsState::ObtainDelegationState {
+                        FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
                             sub_state:
-                                DelegationState::GetDelegationWaiting {
-                                    delegation_data, ..
+                                FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                                    sub_state:
+                                        FetchNnsAssetsState::ObtainDelegationState {
+                                            sub_state:
+                                                DelegationState::GetDelegationWaiting {
+                                                    delegation_data,
+                                                    ..
+                                                },
+                                            ..
+                                        },
+                                    ..
                                 },
-                            ..
                         },
                     ..
                 },
@@ -142,13 +164,20 @@ async fn tmp(env: &Environment, data: &[u8]) -> Result<Vec<u8>, ReceiveDelegatio
             sub_state:
                 HoldingState::FetchAssets {
                     fetch_assets_state:
-                        FetchAssetsState::ObtainDelegationState {
+                        FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
                             sub_state:
-                                DelegationState::GetDelegationWaiting {
-                                    get_delegation_request,
+                                FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                                    sub_state:
+                                        FetchNnsAssetsState::ObtainDelegationState {
+                                            sub_state:
+                                                DelegationState::GetDelegationWaiting {
+                                                    get_delegation_request,
+                                                    ..
+                                                },
+                                            ..
+                                        },
                                     ..
                                 },
-                            ..
                         },
                     ..
                 },

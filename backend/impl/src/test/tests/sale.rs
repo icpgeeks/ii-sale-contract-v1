@@ -12,8 +12,8 @@ use contract_canister_api::{
     set_sale_offer::SetSaleOfferError,
     start_release_identity::StartReleaseIdentityError,
     types::holder::{
-        BuyerOffer, CheckApprovedBalanceError, FetchAssetsState, HolderInformation, HolderState,
-        HoldingState, ReferralRewardData, SaleDealAcceptSubState, SaleDealState, UnsellableReason,
+        BuyerOffer, CheckApprovedBalanceError, HolderInformation, HolderState, HoldingState,
+        ReferralRewardData, SaleDealAcceptSubState, SaleDealState, UnsellableReason,
     },
 };
 
@@ -28,7 +28,7 @@ use crate::{
     result_err_matches, result_ok_with_holder_information,
     test::tests::{
         components::{
-            ic::{ht_set_test_cycles, set_test_caller},
+            ic::set_test_caller,
             icrc2_ledger::ht_approve_account,
             ledger::{
                 ht_deposit_account, ht_get_account_balance, ht_withdraw_from_account, HT_LEDGER_FEE,
@@ -36,10 +36,14 @@ use crate::{
             referral::ht_get_referral_account,
             time::set_test_time,
         },
-        fetch_assets::{ht_capture_identity_and_fetch_assets, ht_fetch_assets},
-        ht_get_test_buyer, ht_get_test_contract_canister, ht_get_test_deployer,
-        ht_get_test_hub_canister, ht_get_test_other, HT_CAPTURED_IDENTITY_NUMBER, HT_MIN_PRICE,
-        HT_QUARANTINE_DURATION, HT_SALE_DEAL_SAFE_CLOSE_DURATION,
+        drivers::{
+            fetch::FetchConfig,
+            hold::{drive_after_quarantine, drive_to_standard_hold},
+        },
+        ht_get_critical_cycles_threshold, ht_get_test_buyer, ht_get_test_contract_canister,
+        ht_get_test_deployer, ht_get_test_hub_canister, ht_get_test_other,
+        ht_set_cycles_above_critical_threshold, HT_MIN_PRICE, HT_QUARANTINE_DURATION,
+        HT_SALE_DEAL_SAFE_CLOSE_DURATION,
     },
     test_state_matches,
     updates::holder::{
@@ -52,18 +56,34 @@ use crate::{
     },
 };
 
+// ---------------------------------------------------------------------------
+// Local helpers
+// ---------------------------------------------------------------------------
+
+/// Funds the given approved account for a buyer offer in one step:
+/// sets the ICRC-2 allowance and deposits the ICP balance.
+///
+/// The allowance expiration is taken directly from the current sale deal's
+/// `expiration_time` — meaning this helper is only valid after a sale deal
+/// has been created (i.e. after `ht_set_sale_intentions`).
+///
+/// For scenarios that intentionally use *different* amounts for the allowance
+/// vs the deposit (e.g. `test_set_buyer_offer_low_allowance`), call
+/// `ht_approve_account` + `ht_deposit_account` manually.
+fn ht_fund_approved_account(approved_account: &LedgerAccount, amount: TokenE8s) {
+    let identifier = to_account_identifier(approved_account).unwrap();
+    let expires_at = get_holder_model(|_, model| model.sale_deal.as_ref().unwrap().expiration_time);
+    ht_approve_account(identifier.to_hex(), expires_at, amount);
+    ht_deposit_account(&identifier, amount);
+}
+
 #[tokio::test]
 async fn test_sale_quarantine() {
-    ht_capture_identity_and_fetch_assets(
-        2 * HT_SALE_DEAL_SAFE_CLOSE_DURATION,
-        ht_get_test_deployer(),
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
+    drive_to_standard_hold(ht_get_test_deployer()).await;
 
     set_test_time(HT_QUARANTINE_DURATION);
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::Hold {
             quarantine: Some(HT_QUARANTINE_DURATION),
@@ -82,16 +102,11 @@ async fn test_sale_quarantine() {
 
 #[tokio::test]
 async fn test_sale_expired() {
-    ht_capture_identity_and_fetch_assets(
-        2 * HT_SALE_DEAL_SAFE_CLOSE_DURATION,
-        ht_get_test_deployer(),
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
+    drive_to_standard_hold(ht_get_test_deployer()).await;
 
     set_test_time(HT_QUARANTINE_DURATION);
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::Hold {
             quarantine: Some(HT_QUARANTINE_DURATION),
@@ -101,7 +116,7 @@ async fn test_sale_expired() {
 
     set_test_time(HT_SALE_DEAL_SAFE_CLOSE_DURATION);
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::Unsellable {
             reason: UnsellableReason::CertificateExpired
@@ -112,12 +127,7 @@ async fn test_sale_expired() {
 #[tokio::test]
 async fn test_sale_intentions() {
     let owner = ht_get_test_deployer();
-    ht_capture_identity_and_fetch_assets(
-        2 * HT_SALE_DEAL_SAFE_CLOSE_DURATION,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
+    drive_to_standard_hold(owner).await;
 
     // check permission denied
     set_test_time(10);
@@ -233,12 +243,7 @@ pub(crate) async fn ht_set_sale_intentions(owner: Principal) {
 #[tokio::test]
 async fn test_sale_intention_after_sellable_expiration() {
     let owner = ht_get_test_deployer();
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
+    drive_to_standard_hold(owner).await;
 
     // END OF QUARANTINE
 
@@ -264,41 +269,30 @@ async fn test_sale_intention_after_sellable_expiration() {
 }
 
 pub(crate) async fn ht_end_quarantine() {
-    set_test_time(HT_QUARANTINE_DURATION + 1);
+    drive_after_quarantine(&FetchConfig::single_no_neurons()).await;
+}
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::FetchAssets {
-            fetch_assets_state: FetchAssetsState::StartFetchAssets,
-            ..
-        }
-    });
-
-    ht_fetch_assets().await;
-
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::ValidateAssets { .. }
-    });
-
-    crate::handlers::holder::processor::process_holder_with_lock().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            ..
-        }
-    });
+/// Drives the state machine to `HoldingState::Hold { quarantine: None, sale_deal_state: Trading }`.
+///
+/// Executes the full sequence:
+/// 1. `drive_to_standard_hold(owner)` — capture → fetch → check → Hold (in quarantine)
+/// 2. `ht_set_sale_intentions(owner)` — sets seller account + transitions to WaitingSellOffer
+/// 3. `ht_set_sale_offer(owner, sale_price)` — sets sell price → transitions to Trading
+/// 4. `ht_end_quarantine()` — advances past quarantine → re-fetch/re-check cycle → Hold (no quarantine)
+///
+/// Use this in tests that need to start from a ready-to-trade state without caring about the
+/// intermediate capture/fetch/check/quarantine steps.
+pub(crate) async fn ht_drive_to_trading(owner: Principal, sale_price: TokenE8s) {
+    drive_to_standard_hold(owner).await;
+    ht_set_sale_intentions(owner).await;
+    ht_set_sale_offer(owner, sale_price).await;
+    ht_end_quarantine().await;
 }
 
 #[tokio::test]
 async fn test_sale_offer() {
     let owner = ht_get_test_deployer();
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
+    drive_to_standard_hold(owner).await;
     ht_set_sale_intentions(owner).await;
 
     set_test_time(10);
@@ -369,7 +363,7 @@ async fn test_sale_offer() {
 
     set_test_time(HT_SALE_DEAL_SAFE_CLOSE_DURATION);
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::Unsellable {
             reason: UnsellableReason::CertificateExpired,
@@ -383,7 +377,7 @@ pub(crate) async fn ht_set_sale_offer(owner: Principal, price: TokenE8s) -> Hold
     result_ok_with_holder_information!(result)
 }
 
-pub(crate) fn ht_find_offer_by_buyer<'a>(
+fn ht_find_offer_by_buyer<'a>(
     holder_information: &'a HolderInformation,
     buyer: &Principal,
 ) -> Option<&'a BuyerOffer> {
@@ -402,12 +396,7 @@ async fn test_set_buyer_offer_without_sell_intention() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
+    drive_to_standard_hold(owner).await;
     set_test_time(10);
     set_test_caller(buyer);
 
@@ -424,12 +413,7 @@ async fn test_set_buyer_offer_wrong_referral() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
+    drive_to_standard_hold(owner).await;
     ht_set_sale_intentions(owner).await;
     assert!(set_sale_offer_int(2 * HT_MIN_PRICE).await.is_ok());
 
@@ -450,12 +434,7 @@ async fn test_set_buyer_offer_wrong_price() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
+    drive_to_standard_hold(owner).await;
     ht_set_sale_intentions(owner).await;
     assert!(set_sale_offer_int(2 * HT_MIN_PRICE).await.is_ok());
 
@@ -481,35 +460,11 @@ async fn test_set_buyer_offer_invalid_approved_account() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-    ht_set_sale_intentions(owner).await;
-    assert!(set_sale_offer_int(2 * HT_MIN_PRICE).await.is_ok());
-
-    // END OF QUARANTINE
-    ht_end_quarantine().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            sale_deal_state: Some(SaleDealState::Trading)
-        }
-    });
+    ht_drive_to_trading(owner, 2 * HT_MIN_PRICE).await;
 
     set_test_caller(buyer);
 
-    let threshold = get_holder_model(|state, model| {
-        model.initial_cycles
-            * (state
-                .get_env()
-                .get_settings()
-                .critical_cycles_threshold_percentage as u128)
-            / 100
-    });
-    ht_set_test_cycles(threshold + 1);
+    ht_set_cycles_above_critical_threshold();
 
     let approved_account = LedgerAccount::Account {
         owner: buyer,
@@ -543,23 +498,7 @@ async fn test_set_buyer_offer_low_balance() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-    ht_set_sale_intentions(owner).await;
-    assert!(set_sale_offer_int(2 * HT_MIN_PRICE).await.is_ok());
-
-    // END OF QUARANTINE
-    ht_end_quarantine().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            sale_deal_state: Some(SaleDealState::Trading)
-        }
-    });
+    ht_drive_to_trading(owner, 2 * HT_MIN_PRICE).await;
 
     set_test_caller(buyer);
 
@@ -584,23 +523,7 @@ async fn test_set_buyer_offer_low_allowance() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-    ht_set_sale_intentions(owner).await;
-    assert!(set_sale_offer_int(2 * HT_MIN_PRICE).await.is_ok());
-
-    // END OF QUARANTINE
-    ht_end_quarantine().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            sale_deal_state: Some(SaleDealState::Trading)
-        }
-    });
+    ht_drive_to_trading(owner, 2 * HT_MIN_PRICE).await;
 
     set_test_caller(buyer);
 
@@ -629,23 +552,7 @@ async fn test_set_buyer_offer_allowance_expired() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-    ht_set_sale_intentions(owner).await;
-    assert!(set_sale_offer_int(2 * HT_MIN_PRICE).await.is_ok());
-
-    // END OF QUARANTINE
-    ht_end_quarantine().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            sale_deal_state: Some(SaleDealState::Trading)
-        }
-    });
+    ht_drive_to_trading(owner, 2 * HT_MIN_PRICE).await;
 
     set_test_caller(buyer);
 
@@ -674,12 +581,7 @@ async fn test_set_buyer_offer_impossible_for_owner() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
+    drive_to_standard_hold(owner).await;
     ht_set_sale_intentions(owner).await;
     assert!(set_sale_offer_int(2 * HT_MIN_PRICE).await.is_ok());
 
@@ -690,11 +592,7 @@ async fn test_set_buyer_offer_impossible_for_owner() {
     let referral = None;
     let price = HT_MIN_PRICE;
 
-    let approved_account_identifier = to_account_identifier(&approved_account).unwrap();
-    let approved_account_hex = approved_account_identifier.to_hex();
-    let expires_at = get_holder_model(|_, model| model.sale_deal.as_ref().unwrap().expiration_time);
-    ht_approve_account(approved_account_hex.clone(), expires_at, price);
-    ht_deposit_account(&approved_account_identifier, price);
+    ht_fund_approved_account(&approved_account, price);
 
     let result = set_buyer_offer_int(approved_account, referral, price).await;
     result_err_matches!(result, SetBuyerOfferError::HolderWrongState);
@@ -705,12 +603,7 @@ async fn test_set_buyer_offer_impossible_while_quarantine() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
+    drive_to_standard_hold(owner).await;
     ht_set_sale_intentions(owner).await;
     assert!(set_sale_offer_int(2 * HT_MIN_PRICE).await.is_ok());
 
@@ -721,11 +614,7 @@ async fn test_set_buyer_offer_impossible_while_quarantine() {
     let referral = None;
     let price = HT_MIN_PRICE;
 
-    let approved_account_identifier = to_account_identifier(&approved_account).unwrap();
-    let approved_account_hex = approved_account_identifier.to_hex();
-    let expires_at = get_holder_model(|_, model| model.sale_deal.as_ref().unwrap().expiration_time);
-    ht_approve_account(approved_account_hex.clone(), expires_at, price);
-    ht_deposit_account(&approved_account_identifier, price);
+    ht_fund_approved_account(&approved_account, price);
 
     let result = set_buyer_offer_int(approved_account, referral, price).await;
     result_err_matches!(result, SetBuyerOfferError::HolderWrongState);
@@ -736,23 +625,7 @@ async fn test_set_buyer_offer_sellable_expired() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-    ht_set_sale_intentions(owner).await;
-    assert!(set_sale_offer_int(2 * HT_MIN_PRICE).await.is_ok());
-
-    // END OF QUARANTINE
-    ht_end_quarantine().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            sale_deal_state: Some(SaleDealState::Trading)
-        }
-    });
+    ht_drive_to_trading(owner, 2 * HT_MIN_PRICE).await;
 
     set_test_time(HT_SALE_DEAL_SAFE_CLOSE_DURATION);
     set_test_caller(buyer);
@@ -761,11 +634,7 @@ async fn test_set_buyer_offer_sellable_expired() {
     let referral = None;
     let price = HT_MIN_PRICE;
 
-    let approved_account_identifier = to_account_identifier(&approved_account).unwrap();
-    let approved_account_hex = approved_account_identifier.to_hex();
-    let expires_at = get_holder_model(|_, model| model.sale_deal.as_ref().unwrap().expiration_time);
-    ht_approve_account(approved_account_hex.clone(), expires_at, price);
-    ht_deposit_account(&approved_account_identifier, price);
+    ht_fund_approved_account(&approved_account, price);
 
     let result = set_buyer_offer_int(approved_account, referral, price).await;
     result_err_matches!(result, SetBuyerOfferError::HolderWrongState);
@@ -776,12 +645,7 @@ async fn test_set_buyer_offer_not_sell_offer() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
+    drive_to_standard_hold(owner).await;
     ht_set_sale_intentions(owner).await;
 
     // END OF QUARANTINE
@@ -794,26 +658,14 @@ async fn test_set_buyer_offer_not_sell_offer() {
     });
 
     set_test_caller(buyer);
-    let threshold = get_holder_model(|state, model| {
-        model.initial_cycles
-            * (state
-                .get_env()
-                .get_settings()
-                .critical_cycles_threshold_percentage as u128)
-            / 100
-    });
-    ht_set_test_cycles(threshold + 1);
+    ht_set_cycles_above_critical_threshold();
 
     let approved_account = ht_get_buyer_approved_account(&buyer);
     let max_referral_length = get_env().get_settings().max_referral_length;
     let referral = Some("_".repeat(max_referral_length).to_owned());
     let price = HT_MIN_PRICE;
 
-    let approved_account_identifier = to_account_identifier(&approved_account).unwrap();
-    let approved_account_hex = approved_account_identifier.to_hex();
-    let expires_at = get_holder_model(|_, model| model.sale_deal.as_ref().unwrap().expiration_time);
-    ht_approve_account(approved_account_hex.clone(), expires_at, price);
-    ht_deposit_account(&approved_account_identifier, price);
+    ht_fund_approved_account(&approved_account, price);
 
     let result = set_buyer_offer_int(approved_account, referral, price).await;
     result_err_matches!(result, SetBuyerOfferError::HolderWrongState);
@@ -824,45 +676,17 @@ async fn test_set_buyer_offer_success() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-    ht_set_sale_intentions(owner).await;
-    assert!(set_sale_offer_int(2 * HT_MIN_PRICE).await.is_ok());
-
-    // END OF QUARANTINE
-    ht_end_quarantine().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            sale_deal_state: Some(SaleDealState::Trading)
-        }
-    });
+    ht_drive_to_trading(owner, 2 * HT_MIN_PRICE).await;
 
     set_test_caller(buyer);
-    let threshold = get_holder_model(|state, model| {
-        model.initial_cycles
-            * (state
-                .get_env()
-                .get_settings()
-                .critical_cycles_threshold_percentage as u128)
-            / 100
-    });
-    ht_set_test_cycles(threshold + 1);
+    ht_set_cycles_above_critical_threshold();
 
     let approved_account = ht_get_buyer_approved_account(&buyer);
     let max_referral_length = get_env().get_settings().max_referral_length;
     let referral = Some("_".repeat(max_referral_length).to_owned());
     let price = HT_MIN_PRICE;
 
-    let approved_account_identifier = to_account_identifier(&approved_account).unwrap();
-    let approved_account_hex = approved_account_identifier.to_hex();
-    let expires_at = get_holder_model(|_, model| model.sale_deal.as_ref().unwrap().expiration_time);
-    ht_approve_account(approved_account_hex.clone(), expires_at, price);
-    ht_deposit_account(&approved_account_identifier, price);
+    ht_fund_approved_account(&approved_account, price);
 
     let result = set_buyer_offer_int(approved_account.clone(), referral.clone(), price).await;
     let holder_information = result_ok_with_holder_information!(result);
@@ -880,23 +704,7 @@ async fn test_rotation_buyer_offers() {
     let buyer2 = ht_get_test_contract_canister();
     let buyer3 = Principal::management_canister();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-    ht_set_sale_intentions(owner).await;
-    assert!(set_sale_offer_int(10 * HT_MIN_PRICE).await.is_ok());
-
-    // END OF QUARANTINE
-    ht_end_quarantine().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            sale_deal_state: Some(SaleDealState::Trading)
-        }
-    });
+    ht_drive_to_trading(owner, 10 * HT_MIN_PRICE).await;
 
     let check_offers_len = |holder_information: &HolderInformation, expected_len: usize| {
         assert_eq!(
@@ -984,28 +792,7 @@ async fn test_cancel_buyer_offer() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-    ht_set_sale_intentions(owner).await;
-    let sale_offer = 3 * HT_MIN_PRICE;
-    let holder_information = ht_set_sale_offer(owner, sale_offer).await;
-    assert_eq!(
-        holder_information.sale_deal.as_ref().unwrap().get_price(),
-        sale_offer
-    );
-
-    // END OF QUARANTINE
-    ht_end_quarantine().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            sale_deal_state: Some(SaleDealState::Trading)
-        }
-    });
+    ht_drive_to_trading(owner, 3 * HT_MIN_PRICE).await;
 
     // FAIL CANCEL NOT EXISTS OFFER
     set_test_caller(buyer);
@@ -1039,23 +826,7 @@ async fn test_set_seller_offer_fail_when_existing_buyer_offer() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-    ht_set_sale_intentions(owner).await;
-    assert!(set_sale_offer_int(3 * HT_MIN_PRICE).await.is_ok());
-
-    // END OF QUARANTINE
-    ht_end_quarantine().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            sale_deal_state: Some(SaleDealState::Trading)
-        }
-    });
+    ht_drive_to_trading(owner, 3 * HT_MIN_PRICE).await;
 
     set_test_caller(buyer);
 
@@ -1064,11 +835,7 @@ async fn test_set_seller_offer_fail_when_existing_buyer_offer() {
     let referral = Some("_".repeat(max_referral_length).to_owned());
     let price = 2 * HT_MIN_PRICE;
 
-    let approved_account_identifier = to_account_identifier(&approved_account).unwrap();
-    let approved_account_hex = approved_account_identifier.to_hex();
-    let expires_at = get_holder_model(|_, model| model.sale_deal.as_ref().unwrap().expiration_time);
-    ht_approve_account(approved_account_hex.clone(), expires_at, price);
-    ht_deposit_account(&approved_account_identifier, price);
+    ht_fund_approved_account(&approved_account, price);
 
     let result = set_buyer_offer_int(approved_account.clone(), referral.clone(), price).await;
     let holder_information = result_ok_with_holder_information!(result);
@@ -1094,30 +861,7 @@ async fn test_accept_buyer_offer() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-
-    // SET SALE INTENTION AND OFFER
-    ht_set_sale_intentions(owner).await;
-    let sale_offer = 3 * HT_MIN_PRICE;
-    let holder_information = ht_set_sale_offer(owner, sale_offer).await;
-    assert_eq!(
-        holder_information.sale_deal.as_ref().unwrap().get_price(),
-        sale_offer
-    );
-
-    // END OF QUARANTINE
-    ht_end_quarantine().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            sale_deal_state: Some(SaleDealState::Trading)
-        }
-    });
+    ht_drive_to_trading(owner, 3 * HT_MIN_PRICE).await;
 
     // SET BUYER OFFER
     let buyer_offer_amount = 2 * HT_MIN_PRICE;
@@ -1159,14 +903,8 @@ async fn test_accept_buyer_offer() {
     result_err_matches!(result, AcceptBuyerOfferError::OfferMismatch);
 
     // FAIL ACCEPT CRITICAL_CYCLES_LEVEL
-    let threshold = get_holder_model(|state, model| {
-        model.initial_cycles
-            * (state
-                .get_env()
-                .get_settings()
-                .critical_cycles_threshold_percentage as u128)
-            / 100
-    });
+    let threshold = ht_get_critical_cycles_threshold();
+    use crate::test::tests::components::ic::ht_set_test_cycles;
     ht_set_test_cycles(threshold);
     let result = accept_buyer_offer_int(AcceptBuyerOfferArgs {
         buyer,
@@ -1182,7 +920,7 @@ async fn test_accept_buyer_offer() {
     );
 
     // ACCEPT BUYER OFFER SUCCESS
-    ht_set_test_cycles(threshold + 1);
+    ht_set_cycles_above_critical_threshold();
 
     let result = accept_buyer_offer_int(AcceptBuyerOfferArgs {
         buyer,
@@ -1206,7 +944,7 @@ async fn test_accept_buyer_offer() {
             }
         } if accept_buyer == &buyer);
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
             sub_state: HoldingState::Hold {
                 quarantine: None,
@@ -1227,30 +965,7 @@ async fn test_accept_failed_buyer_offer() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-
-    // SET SALE INTENTION AND OFFER
-    ht_set_sale_intentions(owner).await;
-    let sale_offer = 3 * HT_MIN_PRICE;
-    let holder_information = ht_set_sale_offer(owner, sale_offer).await;
-    assert_eq!(
-        holder_information.sale_deal.as_ref().unwrap().get_price(),
-        sale_offer
-    );
-
-    // END OF QUARANTINE
-    ht_end_quarantine().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            sale_deal_state: Some(SaleDealState::Trading)
-        }
-    });
+    ht_drive_to_trading(owner, 3 * HT_MIN_PRICE).await;
 
     // SET BUYER OFFER
     let buyer_offer_amount = 2 * HT_MIN_PRICE;
@@ -1262,15 +977,7 @@ async fn test_accept_failed_buyer_offer() {
         buyer_offer_amount
     );
 
-    let threshold = get_holder_model(|state, model| {
-        model.initial_cycles
-            * (state
-                .get_env()
-                .get_settings()
-                .critical_cycles_threshold_percentage as u128)
-            / 100
-    });
-    ht_set_test_cycles(threshold + 1);
+    ht_set_cycles_above_critical_threshold();
 
     // set less balance
     let _r = ht_withdraw_from_account(approved_account_identifier.to_hex(), 1).unwrap();
@@ -1293,30 +1000,7 @@ async fn test_accept_buyer_offer_expiration_failed() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-
-    // SET SALE INTENTION AND OFFER
-    ht_set_sale_intentions(owner).await;
-    let sale_offer = 3 * HT_MIN_PRICE;
-    let holder_information = ht_set_sale_offer(owner, sale_offer).await;
-    assert_eq!(
-        holder_information.sale_deal.as_ref().unwrap().get_price(),
-        sale_offer
-    );
-
-    // END OF QUARANTINE
-    ht_end_quarantine().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            sale_deal_state: Some(SaleDealState::Trading)
-        }
-    });
+    ht_drive_to_trading(owner, 3 * HT_MIN_PRICE).await;
 
     // SET BUYER OFFER
     let buyer_offer_amount = 2 * HT_MIN_PRICE;
@@ -1344,29 +1028,7 @@ async fn test_set_sale_offer_with_accept() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-    ht_set_sale_intentions(owner).await;
-
-    let sale_offer = 3 * HT_MIN_PRICE;
-    let holder_information = ht_set_sale_offer(owner, sale_offer).await;
-    assert_eq!(
-        holder_information.sale_deal.as_ref().unwrap().get_price(),
-        sale_offer
-    );
-
-    // END OF QUARANTINE
-    ht_end_quarantine().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            sale_deal_state: Some(SaleDealState::Trading)
-        }
-    });
+    ht_drive_to_trading(owner, 3 * HT_MIN_PRICE).await;
 
     // SET BUYER OFFER
     let buyer_offer_amount = 2 * HT_MIN_PRICE;
@@ -1418,28 +1080,8 @@ async fn test_fail_accept_sale_deal_by_buyer() {
     let owner = ht_get_test_deployer();
     let buyer = ht_get_test_buyer();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-    ht_set_sale_intentions(owner).await;
     let sale_offer = 3 * HT_MIN_PRICE;
-    let holder_information = ht_set_sale_offer(owner, sale_offer).await;
-    assert_eq!(
-        holder_information.sale_deal.as_ref().unwrap().get_price(),
-        sale_offer
-    );
-
-    // END OF QUARANTINE
-    ht_end_quarantine().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            sale_deal_state: Some(SaleDealState::Trading)
-        }
-    });
+    ht_drive_to_trading(owner, sale_offer).await;
 
     // SET BUYER OFFER
     let buyer_offer_amount = 2 * HT_MIN_PRICE;
@@ -1535,28 +1177,7 @@ async fn test_cancel_not_accepted_sale_deal_by_seller() {
     let buyer1 = ht_get_test_hub_canister();
     let buyer2 = ht_get_test_contract_canister();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-    ht_set_sale_intentions(owner).await;
-    let sale_offer = 3 * HT_MIN_PRICE;
-    let holder_information = ht_set_sale_offer(owner, sale_offer).await;
-    assert_eq!(
-        holder_information.sale_deal.as_ref().unwrap().get_price(),
-        sale_offer
-    );
-
-    // END OF QUARANTINE
-    ht_end_quarantine().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            sale_deal_state: Some(SaleDealState::Trading)
-        }
-    });
+    ht_drive_to_trading(owner, 3 * HT_MIN_PRICE).await;
 
     // SET BUYER1 OFFER
     let buyer1_offer_amount = 2 * HT_MIN_PRICE;
@@ -1626,28 +1247,7 @@ async fn test_complete_sale_deal_with_referral() {
     let buyer1 = ht_get_test_hub_canister();
     let buyer2 = ht_get_test_contract_canister();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-    ht_set_sale_intentions(owner).await;
-    let sale_offer = 4 * HT_MIN_PRICE;
-    let holder_information = ht_set_sale_offer(owner, sale_offer).await;
-    assert_eq!(
-        holder_information.sale_deal.as_ref().unwrap().get_price(),
-        sale_offer
-    );
-
-    // END OF QUARANTINE
-    ht_end_quarantine().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            sale_deal_state: Some(SaleDealState::Trading)
-        }
-    });
+    ht_drive_to_trading(owner, 4 * HT_MIN_PRICE).await;
 
     // SET BUYER1 OFFER
     let buyer1_offer_amount = HT_MIN_PRICE;
@@ -1710,7 +1310,7 @@ async fn test_complete_sale_deal_with_referral() {
         .get_canister_account(&transit_sub_account);
     assert_eq!(ht_get_account_balance(transit_account.to_hex()), 0);
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
             sub_state: HoldingState::Hold {
                 quarantine: None,
@@ -1725,7 +1325,7 @@ async fn test_complete_sale_deal_with_referral() {
     let result = start_release_identity_int().await;
     result_err_matches!(result, StartReleaseIdentityError::HolderWrongState);
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
             sub_state: HoldingState::Hold {
                 quarantine: None,
@@ -1766,7 +1366,7 @@ async fn test_complete_sale_deal_with_referral() {
     )
     .unwrap();
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
             sub_state: HoldingState::Hold {
                 quarantine: None,
@@ -1788,7 +1388,7 @@ async fn test_complete_sale_deal_with_referral() {
         ht_get_account_balance(to_account_identifier(&referral_account).unwrap().to_hex()),
         0
     );
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
             sub_state: HoldingState::Hold {
                 quarantine: None,
@@ -1822,7 +1422,7 @@ async fn test_complete_sale_deal_with_referral() {
 
     assert_eq!(ht_get_account_balance(developer_account.to_hex()), 0);
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
             sub_state: HoldingState::Hold {
                 quarantine: None,
@@ -1850,7 +1450,7 @@ async fn test_complete_sale_deal_with_referral() {
 
     assert_eq!(ht_get_account_balance(hub_account.to_hex()), 0);
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
             sub_state: HoldingState::Hold {
                 quarantine: None,
@@ -1875,7 +1475,7 @@ async fn test_complete_sale_deal_with_referral() {
 
     get_holder_model(|_, model| assert!(model.completed_sale_deal.is_none()));
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::Unsellable {
             reason: UnsellableReason::SaleDealCompleted
@@ -1932,28 +1532,8 @@ async fn test_complete_sale_deal_after_buyer_set_offer() {
     let buyer1 = ht_get_test_hub_canister();
     let buyer2 = ht_get_test_contract_canister();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-    ht_set_sale_intentions(owner).await;
     let sale_offer = 2 * HT_MIN_PRICE;
-    let holder_information = ht_set_sale_offer(owner, sale_offer).await;
-    assert_eq!(
-        holder_information.sale_deal.as_ref().unwrap().get_price(),
-        sale_offer
-    );
-
-    // END OF QUARANTINE
-    ht_end_quarantine().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            sale_deal_state: Some(SaleDealState::Trading)
-        }
-    });
+    ht_drive_to_trading(owner, sale_offer).await;
 
     // SET BUYER1 OFFER
     let buyer1_offer_amount = HT_MIN_PRICE;
@@ -2015,7 +1595,7 @@ async fn test_complete_sale_deal_after_buyer_set_offer() {
     let result = start_release_identity_int().await;
     result_err_matches!(result, StartReleaseIdentityError::HolderWrongState);
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
             sub_state: HoldingState::Hold {
                 quarantine: None,
@@ -2026,7 +1606,7 @@ async fn test_complete_sale_deal_after_buyer_set_offer() {
             }
         } if accept_buyer == &buyer2);
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
 
     let referral_account = get_env()
         .get_settings()
@@ -2080,7 +1660,7 @@ async fn test_complete_sale_deal_after_buyer_set_offer() {
     // TRANSFER REFERRAL REWARD
 
     assert_eq!(ht_get_account_balance(referral_account.to_hex()), 0);
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
             sub_state: HoldingState::Hold {
                 quarantine: None,
@@ -2110,7 +1690,7 @@ async fn test_complete_sale_deal_after_buyer_set_offer() {
 
     assert_eq!(ht_get_account_balance(developer_account.to_hex()), 0);
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
             sub_state: HoldingState::Hold {
                 quarantine: None,
@@ -2138,7 +1718,7 @@ async fn test_complete_sale_deal_after_buyer_set_offer() {
 
     assert_eq!(ht_get_account_balance(hub_account.to_hex()), 0);
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
             sub_state: HoldingState::Hold {
                 quarantine: None,
@@ -2161,7 +1741,7 @@ async fn test_complete_sale_deal_after_buyer_set_offer() {
             - HT_LEDGER_FEE
     );
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::Unsellable {
             reason: UnsellableReason::SaleDealCompleted
@@ -2198,28 +1778,7 @@ async fn test_accept_sale_deal_and_fail_transfer() {
     let buyer1 = ht_get_test_hub_canister();
     let buyer2 = ht_get_test_contract_canister();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-    ht_set_sale_intentions(owner).await;
-    let sale_offer = 4 * HT_MIN_PRICE;
-    let holder_information = ht_set_sale_offer(owner, sale_offer).await;
-    assert_eq!(
-        holder_information.sale_deal.as_ref().unwrap().get_price(),
-        sale_offer
-    );
-
-    // END OF QUARANTINE
-    ht_end_quarantine().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            sale_deal_state: Some(SaleDealState::Trading)
-        }
-    });
+    ht_drive_to_trading(owner, 4 * HT_MIN_PRICE).await;
 
     // SET BUYER1 OFFER
     let buyer1_offer_amount = HT_MIN_PRICE;
@@ -2283,7 +1842,7 @@ async fn test_accept_sale_deal_and_fail_transfer() {
         .get_canister_account(&transit_sub_account);
     assert_eq!(ht_get_account_balance(transit_account.to_hex()), 0);
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
             sub_state: HoldingState::Hold {
                 quarantine: None,
@@ -2297,11 +1856,14 @@ async fn test_accept_sale_deal_and_fail_transfer() {
     // SET LESS APPROVED AMOUNT TO FAIL TRANSFER
     let approved_account = ht_get_buyer_approved_account(&buyer2);
     let approved_account_identifier = to_account_identifier(&approved_account).unwrap();
-    let approved_account_hex = approved_account_identifier.to_hex();
     let expires_at = get_holder_model(|_, model| model.sale_deal.as_ref().unwrap().expiration_time);
-    ht_approve_account(approved_account_hex.clone(), expires_at, sale_price - 1);
+    ht_approve_account(
+        approved_account_identifier.to_hex(),
+        expires_at,
+        sale_price - 1,
+    );
 
-    crate::handlers::holder::processor::process_holder_with_lock().await;
+    super::tick().await;
     test_state_matches!(HolderState::Holding {
         sub_state: HoldingState::Hold {
             quarantine: None,
@@ -2336,28 +1898,7 @@ async fn test_sale_deal_set_buyer_offer_referral() {
     let buyer1 = ht_get_test_hub_canister();
     let buyer2 = ht_get_test_contract_canister();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-    ht_set_sale_intentions(owner).await;
-    let sale_offer = 3 * HT_MIN_PRICE;
-    let holder_information = ht_set_sale_offer(owner, sale_offer).await;
-    assert_eq!(
-        holder_information.sale_deal.as_ref().unwrap().get_price(),
-        sale_offer
-    );
-
-    // END OF QUARANTINE
-    ht_end_quarantine().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            sale_deal_state: Some(SaleDealState::Trading)
-        }
-    });
+    ht_drive_to_trading(owner, 3 * HT_MIN_PRICE).await;
 
     // SET BUYER1 OFFER
     let buyer1_offer_amount = HT_MIN_PRICE;
@@ -2393,16 +1934,7 @@ async fn test_sale_deal_set_buyer_offer_referral() {
     let buyer2_offer_amount = 2 * HT_MIN_PRICE;
     set_test_caller(buyer2);
     let approved_account2 = ht_get_buyer_approved_account(&buyer2);
-    let buyer2_aid = to_account_identifier(&approved_account2).unwrap();
-    let approved_account2_hex = buyer2_aid.to_hex();
-    let expires_at = get_holder_model(|_, model| model.sale_deal.as_ref().unwrap().expiration_time);
-    ht_approve_account(
-        approved_account2_hex.clone(),
-        expires_at,
-        buyer2_offer_amount,
-    );
-    ht_deposit_account(&buyer2_aid, buyer2_offer_amount);
-
+    ht_fund_approved_account(&approved_account2, buyer2_offer_amount);
     let result = set_buyer_offer_int(approved_account2.clone(), None, buyer2_offer_amount).await;
     let holder_information = result_ok_with_holder_information!(result);
     let offer = ht_find_offer_by_buyer(&holder_information, &buyer2).unwrap();
@@ -2433,28 +1965,7 @@ async fn test_accept_sale_deal_and_check_higher_offer() {
     let buyer1 = ht_get_test_hub_canister();
     let buyer2 = ht_get_test_contract_canister();
 
-    ht_capture_identity_and_fetch_assets(
-        HT_SALE_DEAL_SAFE_CLOSE_DURATION * 2,
-        owner,
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-    ht_set_sale_intentions(owner).await;
-    let sale_offer = 4 * HT_MIN_PRICE;
-    let holder_information = ht_set_sale_offer(owner, sale_offer).await;
-    assert_eq!(
-        holder_information.sale_deal.as_ref().unwrap().get_price(),
-        sale_offer
-    );
-
-    // END OF QUARANTINE
-    ht_end_quarantine().await;
-    test_state_matches!(HolderState::Holding {
-        sub_state: HoldingState::Hold {
-            quarantine: None,
-            sale_deal_state: Some(SaleDealState::Trading)
-        }
-    });
+    ht_drive_to_trading(owner, 4 * HT_MIN_PRICE).await;
 
     // SET BUYER1 OFFER
     let buyer1_offer_amount = HT_MIN_PRICE;

@@ -1,6 +1,6 @@
-# Internet Identity Sale Contract v1.0 — Terms of Use
+# Internet Identity Sale Contract v1.1 — Terms of Use
 
-Last updated: 2026-02-11
+Last updated: 2026-03-09
 
 These Terms of Use ("Terms") govern interaction with a deployed instance of the Internet Identity Sale smart contract canister (the "Contract").
 

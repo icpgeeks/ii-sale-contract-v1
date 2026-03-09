@@ -144,6 +144,7 @@ type CaptureError = variant {
 type CaptureProcessingEvent = variant {
   HolderAuthnMethodRegistered;
   AuthnMethodSessionRegistrationConfirmed : ConfirmHolderAuthnMethodRegistrationArgs;
+  GetHolderContractPrincipalUnauthorized;
   IdentityAuthnMethodProtected : record {
     public_key : blob;
     meta_data : vec record { text; text };
@@ -151,16 +152,12 @@ type CaptureProcessingEvent = variant {
   IdentityOpenidCredentialDeleted : record {
     openid_credential_key : record { text; text };
   };
-  HolderContractPrincipalIsHolderOwner;
+  HolderContractPrincipalIsHolderOwner : record { account_number : opt nat64 };
   IdentityAuthnMethodRegistrationExited;
   CaptureFinished;
   ProtectedIdentityAuthnMethodDeleted;
-  GetHolderContractPrincipalUnathorized;
   IdentityAuthnMethodsPartiallyDeleted;
   AuthnMethodSessionRegisterError : record { error : CaptureError };
-  HolderContractPrincipalObtained : record {
-    holder_contract_principal : principal;
-  };
   EcdsaKeyCreated : record { ecdsa_key : blob };
   AuthnMethodSessionRegistered : record {
     confirmation_code : text;
@@ -174,17 +171,23 @@ type CaptureProcessingEvent = variant {
     active_registration : bool;
     openid_credentials : opt vec record { text; text };
   };
+  HolderContractPrincipalCheckPassed;
   IdentityAPIChangeDetected;
   HolderAuthnMethodRegisterError : record { error : CaptureError };
   IdentityAuthnMethodDeleted : record { public_key : blob };
+  AccountPrincipalChecked : record {
+    "principal" : principal;
+    account_number : opt nat64;
+  };
   IdentityAuthnMethodsDeleted : record { identity_name : opt text };
   IdentityAuthnMethodsResync;
+  AccountsForPrincipalCheckGot : record { accounts_to_check : vec opt nat64 };
   CaptureStarted;
 };
 type CaptureState = variant {
   CaptureFailed : record { error : CaptureError };
   CreateEcdsaKey;
-  GetHolderContractPrincipal : ConfirmHolderAuthnMethodRegistrationArgs;
+  GetHolderContractAccounts : ConfirmHolderAuthnMethodRegistrationArgs;
   NeedConfirmAuthnMethodSessionRegistration : record {
     confirmation_code : text;
     expiration : nat64;
@@ -197,6 +200,10 @@ type CaptureState = variant {
     authn_pubkeys : vec blob;
     active_registration : bool;
     openid_credentials : opt vec record { text; text };
+  };
+  CheckHolderContractPrincipals : record {
+    accounts_to_check : vec opt nat64;
+    frontend_hostname : text;
   };
   StartCapture;
   NeedDeleteProtectedIdentityAuthnMethod : record {
@@ -227,12 +234,16 @@ type CheckAssetsEvent = variant {
   CheckAssetsFinished;
   AccountHasApprove : record { sub_account : blob };
   CheckAssetsStarted;
-  CheckAccountsPrepared : record { sub_accounts : vec blob };
+  CheckAccountsPrepared : record {
+    sub_accounts : vec record { principal; blob };
+  };
 };
 type CheckAssetsState = variant {
   CheckAccountsForNoApprovePrepare;
   FinishCheckAssets;
-  CheckAccountsForNoApproveSequential : record { sub_accounts : vec blob };
+  CheckAccountsForNoApproveSequential : record {
+    sub_accounts : vec record { principal; blob };
+  };
   StartCheckAssets;
 };
 type CheckPermissionStrategy = variant {
@@ -286,7 +297,10 @@ type DelegationData = record {
   timestamp : nat;
 };
 type DelegationState = variant {
-  NeedPrepareDelegation : record { hostname : text };
+  NeedPrepareDelegation : record {
+    identity_account_number : opt nat64;
+    hostname : text;
+  };
   GetDelegationWaiting : record {
     delegation_data : DelegationData;
     get_delegation_request : QueryCanisterSignedRequest;
@@ -300,6 +314,10 @@ type FetchAssetsEvent = variant {
   };
   NeuronsInformationObtained;
   NeuronsInformationGotEmpty : record { neuron_ids : vec nat64 };
+  IdentityAccountsGot : record {
+    hostname : text;
+    accounts : vec record { opt nat64; opt text };
+  };
   NeuronsIdsGot : record { neuron_ids : vec nat64 };
   AccountsBalancesObtained;
   NeuronHotkeyDeleted : record {
@@ -307,6 +325,7 @@ type FetchAssetsEvent = variant {
     failed : opt text;
     neuron_id : nat64;
   };
+  NnsAssetsForAccountFetched : record { identity_account_number : opt nat64 };
   TooManyNeurons;
   ObtainDelegation : record { event : ObtainDelegationEvent };
   AllNeuronsHotkeysDeleted;
@@ -322,13 +341,19 @@ type FetchAssetsEvent = variant {
   FetchAssetsFinished;
 };
 type FetchAssetsState = variant {
-  FinishFetchAssets;
-  ObtainDelegationState : record {
-    sub_state : DelegationState;
-    wrap_fetch_state : FetchAssetsState;
+  FetchIdentityAccountsNnsAssetsState : record {
+    sub_state : FetchIdentityAccountsNnsAssetsState;
   };
-  FetchNnsAssetsState : record { sub_state : FetchNnsAssetsState };
+  FinishFetchAssets;
   StartFetchAssets;
+};
+type FetchIdentityAccountsNnsAssetsState = variant {
+  FinishCurrentNnsAccountFetch : record { identity_account_number : opt nat64 };
+  GetIdentityAccounts;
+  FetchNnsAssetsState : record {
+    identity_account_number : opt nat64;
+    sub_state : FetchNnsAssetsState;
+  };
 };
 type FetchNnsAssetsState = variant {
   GetNeuronsIds;
@@ -337,6 +362,10 @@ type FetchNnsAssetsState = variant {
   };
   DeletingNeuronsHotkeys : record {
     neuron_hotkeys : vec record { nat64; vec principal };
+  };
+  ObtainDelegationState : record {
+    sub_state : DelegationState;
+    wrap_fetch_state : FetchNnsAssetsState;
   };
   GetAccountsInformation;
   GetAccountsBalances;
@@ -386,10 +415,7 @@ type GetHolderEventsResult = record {
   total_count : nat64;
 };
 type GetHolderInformationResponse = variant { Ok : ProcessHolderResult };
-type HolderAssets = record {
-  controlled_neurons : opt Timestamped_1;
-  accounts : opt Timestamped_3;
-};
+type HolderAssets = record { nns_assets : opt vec IdentityAccountNnsAssets };
 type HolderInformation = record {
   identity_name : opt text;
   completed_sale_deal : opt CompletedSaleDeal;
@@ -473,6 +499,12 @@ type IdentifiedHolderProcessingEvent = record {
   time : nat64;
   event : HolderProcessingEvent;
 };
+type IdentityAccountNnsAssets = record {
+  identity_account_number : opt nat64;
+  "principal" : opt principal;
+  assets : opt NnsHolderAssets;
+  account_name : opt text;
+};
 type IdentityEventsSortingKey = variant { Created };
 type InitContractArgs = record {
   certificate : SignedContractCertificate;
@@ -525,6 +557,10 @@ type NeuronInformationExtended = record {
   dissolve_delay_seconds : nat64;
   state : int32;
   age_seconds : nat64;
+};
+type NnsHolderAssets = record {
+  controlled_neurons : opt Timestamped_1;
+  accounts : opt Timestamped_3;
 };
 type ObtainDelegationEvent = variant {
   RetryPrepareDelegation;

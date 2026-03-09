@@ -17,7 +17,7 @@ use common_canister_types::{
 use contract_canister_api::types::holder::{
     CaptureState, CompletedSaleDeal, DelegationData, HolderAssets, HolderProcessingError,
     HolderProcessingEvent::{self, *},
-    HolderState, NeuronAsset, NeuronInformation, SaleDeal,
+    HolderState, NeuronAsset, NeuronInformation, NnsHolderAssets, SaleDeal,
 };
 use events::{
     capture::handle_capture_event, holding::handle_holding_event, release::handle_releasing_event,
@@ -286,6 +286,7 @@ pub struct HolderModel {
     pub holding_timestamp: Option<TimestampMillis>,
     pub delegation_data: Option<DelegationData>,
     pub fetching_assets: Option<HolderAssets>,
+    pub fetching_nns_assets: Option<NnsHolderAssets>,
     pub assets: Option<Timestamped<HolderAssets>>,
     pub sale_deal: Option<SaleDeal>,
     pub completed_sale_deal: Option<CompletedSaleDeal>,
@@ -305,6 +306,7 @@ impl HolderModel {
             holding_timestamp: None,
             delegation_data: None,
             fetching_assets: None,
+            fetching_nns_assets: None,
             assets: None,
             sale_deal: None,
             completed_sale_deal: None,
@@ -324,6 +326,7 @@ impl HolderModel {
         self.holding_timestamp = None;
         self.delegation_data = None;
         self.fetching_assets = None;
+        self.fetching_nns_assets = None;
         self.assets = None;
         self.sale_deal = None;
         self.processing_error = None;
@@ -376,8 +379,19 @@ impl HolderModel {
 // utility functions
 
 pub(crate) fn compute_full_neurons_value(assets: &HolderAssets) -> TokenE8s {
-    assets.controlled_neurons.as_ref().map_or(0, |neurons| {
-        neurons.value.iter().map(compute_full_neuron_value).sum()
+    assets.nns_assets.as_ref().map_or(0, |accounts| {
+        accounts
+            .iter()
+            .map(|account_assets| {
+                account_assets
+                    .assets
+                    .as_ref()
+                    .and_then(|nns| nns.controlled_neurons.as_ref())
+                    .map_or(0, |neurons| {
+                        neurons.value.iter().map(compute_full_neuron_value).sum()
+                    })
+            })
+            .sum()
     })
 }
 

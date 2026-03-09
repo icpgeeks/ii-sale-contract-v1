@@ -1,6 +1,6 @@
 use contract_canister_api::types::holder::{
-    DelegationState, FetchAssetsEvent, FetchAssetsState, FetchNnsAssetsState,
-    HolderProcessingError, HolderProcessingEvent, HoldingProcessingEvent,
+    FetchAssetsEvent, FetchAssetsState, FetchIdentityAccountsNnsAssetsState, HolderProcessingError,
+    HolderProcessingEvent, HoldingProcessingEvent,
 };
 
 use crate::components::Environment;
@@ -20,13 +20,8 @@ pub(crate) async fn process(
         HolderProcessingEvent::Holding {
             event: HoldingProcessingEvent::FetchAssets {
                 event: FetchAssetsEvent::FetchAssetsStarted {
-                    fetch_assets_state: FetchAssetsState::ObtainDelegationState {
-                        sub_state: DelegationState::NeedPrepareDelegation {
-                            hostname: env.get_settings().nns_hostname.clone(),
-                        },
-                        wrap_fetch_state: Box::new(FetchAssetsState::FetchNnsAssetsState {
-                            sub_state: FetchNnsAssetsState::GetNeuronsIds,
-                        }),
+                    fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                        sub_state: FetchIdentityAccountsNnsAssetsState::GetIdentityAccounts,
                     },
                 },
             },

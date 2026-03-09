@@ -1,6 +1,7 @@
 use contract_canister_api::types::holder::{
-    CancelSaleDealState, CheckAssetsState, DelegationState, FetchAssetsState, FetchNnsAssetsState,
-    SaleDealAcceptSubState, SaleDealState,
+    CancelSaleDealState, CheckAssetsState, DelegationState, FetchAssetsState,
+    FetchIdentityAccountsNnsAssetsState, FetchNnsAssetsState, SaleDealAcceptSubState,
+    SaleDealState,
 };
 
 use contract_canister_api::types::holder::{
@@ -14,10 +15,10 @@ use crate::handlers::holder::states::{
     cancel_sale_deal, check_accounts_for_no_approve_prepare,
     check_accounts_for_no_approve_sequential, check_quarantine_completed, delete_neurons_hotkeys,
     finish_check_assets, finish_fetch_assets, get_accounts_balances, get_accounts_information,
-    get_holder_model, get_neurons_ids, get_neurons_information, prepare_delegation,
-    refund_buyer_from_transit_account, resolve_referral_reward_data, sleep_processing,
-    start_accept_sale_deal, start_check_assets, start_fetch_assets, start_holding,
-    transfer_developer_reward, transfer_hub_reward, transfer_referral_reward,
+    get_holder_model, get_identity_accounts, get_neurons_ids, get_neurons_information,
+    prepare_delegation, refund_buyer_from_transit_account, resolve_referral_reward_data,
+    sleep_processing, start_accept_sale_deal, start_check_assets, start_fetch_assets,
+    start_holding, transfer_developer_reward, transfer_hub_reward, transfer_referral_reward,
     transfer_sale_deal_amount_to_seller_account, transfer_sale_deal_amount_to_transit_account,
     update_holder, validate_assets,
 };
@@ -186,27 +187,43 @@ fn get_holding_processor<'a>(holding_state: HoldingState) -> Option<Processor<'a
             fetch_assets_state, ..
         } => match fetch_assets_state {
             FetchAssetsState::StartFetchAssets => Some(processor_toolkit!(start_fetch_assets)),
-            FetchAssetsState::FetchNnsAssetsState { sub_state } => Some(match sub_state {
-                FetchNnsAssetsState::GetNeuronsIds => processor_toolkit!(get_neurons_ids),
-                FetchNnsAssetsState::GetNeuronsInformation { .. } => {
-                    processor_toolkit!(get_neurons_information)
+            FetchAssetsState::FetchIdentityAccountsNnsAssetsState { sub_state } => {
+                match sub_state {
+                    FetchIdentityAccountsNnsAssetsState::GetIdentityAccounts => {
+                        Some(processor_toolkit!(get_identity_accounts))
+                    }
+                    FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                        sub_state, ..
+                    } => match sub_state {
+                        FetchNnsAssetsState::ObtainDelegationState { sub_state, .. } => {
+                            match sub_state {
+                                DelegationState::NeedPrepareDelegation { .. } => {
+                                    Some(processor_toolkit!(prepare_delegation))
+                                }
+                                DelegationState::GetDelegationWaiting { .. } => None,
+                            }
+                        }
+                        FetchNnsAssetsState::GetNeuronsIds => {
+                            Some(processor_toolkit!(get_neurons_ids))
+                        }
+                        FetchNnsAssetsState::GetNeuronsInformation { .. } => {
+                            Some(processor_toolkit!(get_neurons_information))
+                        }
+                        FetchNnsAssetsState::DeletingNeuronsHotkeys { .. } => {
+                            Some(processor_toolkit!(delete_neurons_hotkeys))
+                        }
+                        FetchNnsAssetsState::GetAccountsInformation => {
+                            Some(processor_toolkit!(get_accounts_information))
+                        }
+                        FetchNnsAssetsState::GetAccountsBalances => {
+                            Some(processor_toolkit!(get_accounts_balances))
+                        }
+                    },
+                    FetchIdentityAccountsNnsAssetsState::FinishCurrentNnsAccountFetch {
+                        ..
+                    } => Some(processor_toolkit!(finish_fetch_assets)),
                 }
-                FetchNnsAssetsState::DeletingNeuronsHotkeys { .. } => {
-                    processor_toolkit!(delete_neurons_hotkeys)
-                }
-                FetchNnsAssetsState::GetAccountsInformation => {
-                    processor_toolkit!(get_accounts_information)
-                }
-                FetchNnsAssetsState::GetAccountsBalances => {
-                    processor_toolkit!(get_accounts_balances)
-                }
-            }),
-            FetchAssetsState::ObtainDelegationState { sub_state, .. } => match sub_state {
-                DelegationState::NeedPrepareDelegation { .. } => {
-                    Some(processor_toolkit!(prepare_delegation))
-                }
-                DelegationState::GetDelegationWaiting { .. } => None,
-            },
+            }
             FetchAssetsState::FinishFetchAssets => Some(processor_toolkit!(finish_fetch_assets)),
         },
         HoldingState::Hold {

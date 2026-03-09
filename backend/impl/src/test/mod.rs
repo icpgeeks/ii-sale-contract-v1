@@ -1,6 +1,9 @@
 #[cfg(test)]
 mod tests {
 
+    pub(crate) mod drivers;
+    pub(crate) mod support;
+
     mod activate_contract;
     mod add_contract_controller;
     mod check_assets;
@@ -11,7 +14,7 @@ mod tests {
     mod releasing;
     mod rewards_calculator;
     mod sale;
-    //    mod serde_candid;
+
     mod start_capture;
 
     use crate::components::{Environment, Settings};
@@ -41,7 +44,56 @@ mod tests {
     use common_contract_api::{ContractCertificate, SignedContractCertificate};
     use ic_ledger_types::AccountIdentifier;
 
-    pub const HT_CAPTURED_IDENTITY_NUMBER: u64 = 555;
+    /// Shorthand for `process_holder_with_lock().await` — advances the state machine one step.
+    ///
+    /// Use this everywhere instead of the full
+    /// `crate::handlers::holder::processor::process_holder_with_lock().await`
+    /// to keep test code concise.
+    pub(crate) async fn tick() {
+        crate::handlers::holder::processor::process_holder_with_lock().await;
+    }
+
+    /// Advances the state machine `n` steps.
+    ///
+    /// Prefer this over a series of naked `tick().await` calls whenever you need
+    /// to skip through several well-known intermediate states.  Add a comment
+    /// explaining what each step does so future readers can follow the flow
+    /// without counting ticks.
+    pub(crate) async fn tick_n(n: usize) {
+        for _ in 0..n {
+            crate::handlers::holder::processor::process_holder_with_lock().await;
+        }
+    }
+
+    // =========================================================================
+    // Cycles helpers
+    // =========================================================================
+
+    /// Returns the current critical cycles threshold computed from the canister's
+    /// initial cycle count and the `critical_cycles_threshold_percentage` setting.
+    ///
+    /// Useful when a test needs to assert on the exact threshold value returned in
+    /// an error payload.
+    pub(crate) fn ht_get_critical_cycles_threshold() -> u128 {
+        use crate::handlers::holder::states::get_holder_model;
+        get_holder_model(|state, model| {
+            model.initial_cycles
+                * state
+                    .get_env()
+                    .get_settings()
+                    .critical_cycles_threshold_percentage as u128
+                / 100
+        })
+    }
+
+    /// Sets the test cycle counter to exactly 1 above the critical threshold.
+    ///
+    /// Call this before any operation that requires the canister not to be in the
+    /// critical-cycles state (e.g. `set_buyer_offer_int`, `accept_buyer_offer_int`).
+    pub(crate) fn ht_set_cycles_above_critical_threshold() {
+        use crate::test::tests::components::ic::ht_set_test_cycles;
+        ht_set_test_cycles(ht_get_critical_cycles_threshold() + 1);
+    }
 
     pub(crate) fn ht_get_test_hub_canister() -> Principal {
         Principal::from_text("xapqu-4qaaa-aaaak-quexq-cai").unwrap()
@@ -100,7 +152,7 @@ mod tests {
         ht_init_contract(args, settings);
     }
 
-    pub(crate) fn ht_init_contract(args: InitContractArgs, settings: Settings) {
+    fn ht_init_contract(args: InitContractArgs, settings: Settings) {
         ht_init_contract_int(args, |model| {
             ht_create_environment(
                 IcTest {
@@ -117,7 +169,7 @@ mod tests {
         });
     }
 
-    pub(crate) fn ht_init_contract_int<F>(args: InitContractArgs, env_builder: F)
+    fn ht_init_contract_int<F>(args: InitContractArgs, env_builder: F)
     where
         F: FnOnce(&ContractModel) -> Environment,
     {
@@ -125,7 +177,7 @@ mod tests {
         init_state(CanisterState::new(env_builder(&model), model));
     }
 
-    pub fn ht_create_environment(ic: IcTest, settings: Settings) -> Environment {
+    pub(crate) fn ht_create_environment(ic: IcTest, settings: Settings) -> Environment {
         Environment::new(
             Box::new(PrintLoggerImpl {}),
             Box::new(TimeTest {}),
@@ -154,15 +206,95 @@ mod tests {
         )
     }
 
-    pub const HT_SALE_DEAL_SAFE_CLOSE_DURATION: u64 = 24 * 60 * 60 * 1000;
-    pub const HT_QUARANTINE_DURATION: u64 = 10 * 60_000;
-    pub const HT_MIN_PRICE: u64 = 100_000_000;
-    pub const HT_DEVELOPER_REWARDS_PERMYRIAD: u32 = 1_000;
-    pub const HT_REFERRAL_REWARDS_PERMYRIAD: u32 = 1_000;
-    pub const HT_HUB_REWARDS_PERMYRIAD: u32 = 1_000;
+    // =========================================================================
+    // Test constants
+    // =========================================================================
+
+    /// Identity number captured during test setup.
+    pub(crate) const HT_CAPTURED_IDENTITY_NUMBER: u64 = 555;
+
+    // --- Sale / timing constants ---
+    pub(crate) const HT_SALE_DEAL_SAFE_CLOSE_DURATION: u64 = 24 * 60 * 60 * 1000;
+    pub(crate) const HT_QUARANTINE_DURATION: u64 = 10 * 60_000;
+    pub(crate) const HT_MIN_PRICE: u64 = 100_000_000;
+
+    /// Standard certificate expiration used in the majority of tests.
+    ///
+    /// Equals `2 × HT_SALE_DEAL_SAFE_CLOSE_DURATION`, which ensures the certificate does not
+    /// expire during the sale window, giving tests enough headroom without caring about the
+    /// exact value.
+    pub(crate) const HT_STANDARD_CERT_EXPIRATION: u64 = 2 * HT_SALE_DEAL_SAFE_CLOSE_DURATION;
+
+    // --- Reward permyriad constants ---
+    pub(crate) const HT_DEVELOPER_REWARDS_PERMYRIAD: u32 = 1_000;
+    pub(crate) const HT_REFERRAL_REWARDS_PERMYRIAD: u32 = 1_000;
+    pub(crate) const HT_HUB_REWARDS_PERMYRIAD: u32 = 1_000;
+
+    // --- Release / authn method registration (owner side) constants ---
+
+    /// Expiration (nanoseconds) returned by the mock
+    /// `authn_method_registration_mode_enter` response during release-flow tests.
+    pub(crate) const TEST_RELEASE_EXPIRATION_NANOS: u64 = 60_000_000_000;
+
+    /// Registration ID produced by the test RNG when `generate_random_string(5, zeros, dict)`
+    /// is called — always `"00000"` because `dict[0] == '0'` and the test RNG returns zeros.
+    pub(crate) const TEST_RELEASE_REGISTRATION_ID: &str = "00000";
+
+    // --- Delegation / fetch constants ---
+
+    // --- Capture / authn method registration constants ---
+
+    /// Confirmation code returned by the mock authn-method registration response.
+    pub(crate) const TEST_AUTHN_CONFIRMATION_CODE: &str = "cc";
+    /// Hostname used when confirming holder authn-method registration in tests.
+    pub(crate) const TEST_CAPTURE_HOSTNAME: &str = "aa.bb.cc";
+    /// Expiration timestamp (nanoseconds) returned by the mock authn-method registration response.
+    pub(crate) const TEST_AUTHN_REGISTER_EXPIRATION_NANOS: u64 = 4_444_000_000;
+    /// Expiration timestamp (milliseconds) — nanos / 1_000_000.
+    pub(crate) const TEST_AUTHN_REGISTER_EXPIRATION_MILLIS: u64 = 4_444;
+
+    /// Delegation public key used by default in fetch-asset tests.
+    pub(crate) const TEST_DELEGATION_KEY_1: &[u8] = &[1];
+    /// Alternative delegation public key for second identity account in multi-account tests.
+    pub(crate) const TEST_DELEGATION_KEY_2: &[u8] = &[2];
+    /// Delegation expiration timestamp used in fetch-asset tests.
+    pub(crate) const TEST_DELEGATION_EXPIRATION: u64 = 234_213_412_341_234;
+    /// Hostname used when constructing test delegation data.
+    pub(crate) const TEST_DELEGATION_HOSTNAME: &str = "a.b.c";
+
+    // --- Releasing identity number ---
+
+    /// Identity number used by the majority of `releasing.rs` tests.
+    ///
+    /// The specific value has no semantic meaning — it simply gives the tests a
+    /// recognisable number to `assert_eq!` against `holder_information.identity_number`.
+    pub(crate) const TEST_RELEASING_IDENTITY_NUMBER: u64 = 777;
+
+    // --- Release expiration (millis) ---
+
+    /// Expiration timestamp in **milliseconds** derived from `TEST_RELEASE_EXPIRATION_NANOS`.
+    ///
+    /// `TEST_RELEASE_EXPIRATION_NANOS / 1_000_000 = 60_000`.
+    pub(crate) const TEST_RELEASE_EXPIRATION_MILLIS: u64 =
+        TEST_RELEASE_EXPIRATION_NANOS / 1_000_000;
+
+    // --- Sequential check steps ---
+
+    /// Number of sequential sub-account check iterations in the CheckAssets phase.
+    ///
+    /// INVARIANT: must equal
+    /// `Settings::default_number_of_subaccounts_to_check_for_no_approve`
+    /// as configured in `ht_create_settings()`.  A `debug_assert_eq!` in
+    /// `ht_create_settings` enforces this at runtime during test builds.
+    ///
+    /// The driver loop `for _ in 0..=HT_SEQUENTIAL_CHECK_STEPS` covers:
+    ///   - iteration 0   : CheckAccountsForNoApprovePrepare → Sequential (first sub-account)
+    ///   - iterations 1‥4: advance through remaining sub-accounts (incl. main sub-account 0)
+    /// One tick after the loop transitions to FinishCheckAssets.
+    pub(crate) const HT_SEQUENTIAL_CHECK_STEPS: usize = 4;
 
     pub(crate) fn ht_create_settings() -> Settings {
-        Settings {
+        let settings = Settings {
             ic_url: "https://icp0.io/".to_owned(),
             nns_hostname: "https://nns.ic0.app".to_owned(),
             processing_lock_duration: 60_000,
@@ -174,7 +306,7 @@ mod tests {
             fetch_neurons_information_chunk_count: 10,
             quarantine_duration: HT_QUARANTINE_DURATION,
             sale_deal_safe_close_duration: HT_SALE_DEAL_SAFE_CLOSE_DURATION,
-            default_number_of_subaccounts_to_check_for_no_approve: 4,
+            default_number_of_subaccounts_to_check_for_no_approve: HT_SEQUENTIAL_CHECK_STEPS,
             developer_reward_permyriad: HT_DEVELOPER_REWARDS_PERMYRIAD,
             referral_reward_permyriad: HT_REFERRAL_REWARDS_PERMYRIAD,
             hub_reward_permyriad: HT_HUB_REWARDS_PERMYRIAD,
@@ -198,7 +330,16 @@ mod tests {
             max_subaccounts_allowed: 5,
             warning_cycles_threshold_percentage: 30,
             critical_cycles_threshold_percentage: 10,
-        }
+        };
+        debug_assert_eq!(
+            settings.default_number_of_subaccounts_to_check_for_no_approve,
+            HT_SEQUENTIAL_CHECK_STEPS,
+            "HT_SEQUENTIAL_CHECK_STEPS ({}) must equal \
+             Settings::default_number_of_subaccounts_to_check_for_no_approve ({})",
+            HT_SEQUENTIAL_CHECK_STEPS,
+            settings.default_number_of_subaccounts_to_check_for_no_approve
+        );
+        settings
     }
 }
 
@@ -240,7 +381,14 @@ macro_rules! test_state_extract_neuron_hotkeys {
             HolderState::Holding {
                 sub_state:
                     HoldingState::FetchAssets {
-                        fetch_assets_state: FetchAssetsState::FetchNnsAssetsState { sub_state },
+                        fetch_assets_state:
+                            FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                                sub_state:
+                                    FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                                        sub_state,
+                                        ..
+                                    },
+                            },
                         ..
                     },
             } => match sub_state {

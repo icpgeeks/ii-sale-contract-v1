@@ -4,11 +4,12 @@ import type {HolderCaptureSubStateUnionType} from 'frontend/src/context/identity
 import {useIdentityHolderStateContext} from 'frontend/src/context/identityHolder/state/IdentityHolderStateProvider';
 import {memo, useMemo, type ComponentType} from 'react';
 import {CaptureFailedPage} from './subState/captureFailed/CaptureFailedPage';
+import {CheckHolderContractPrincipalsPanel} from './subState/checkHolderContractPrincipals/CheckHolderContractPrincipalsPanel';
 import {CreateEcdsaKeyPanel} from './subState/createEcdsaKey/CreateEcdsaKeyPanel';
 import {DeletingIdentityAuthnMethodsPanel} from './subState/deletingIdentityAuthnMethods/DeletingIdentityAuthnMethodsPanel';
 import {ExitAndRegisterHolderAuthnMethodPage} from './subState/exitAndRegisterHolderAuthnMethod/ExitAndRegisterHolderAuthnMethodPage';
 import {FinishCapturePanel} from './subState/finishCapture/FinishCapturePanel';
-import {GetHolderContractPrincipalPanel} from './subState/getHolderContractPrincipal/GetHolderContractPrincipalPanel';
+import {GetHolderContractAccountsPanel} from './subState/getHolderContractAccounts/GetHolderContractAccountsPanel';
 import {NeedConfirmAuthnMethodSessionRegistrationPage} from './subState/needConfirmAuthnMethodSessionRegistration/NeedConfirmAuthnMethodSessionRegistrationPage';
 import {NeedDeleteProtectedIdentityAuthnMethodPage} from './subState/needDeleteProtectedIdentityAuthnMethod/NeedDeleteProtectedIdentityAuthnMethodPage';
 import {RegisterAuthnMethodSessionPanel} from './subState/registerAuthnMethodSession/RegisterAuthnMethodSessionPanel';
@@ -41,7 +42,8 @@ const pages: Record<HolderCaptureSubStateUnionType, ComponentType> = {
     RegisterAuthnMethodSession: memo(RegisterAuthnMethodSessionPanel),
     NeedConfirmAuthnMethodSessionRegistration: memo(NeedConfirmAuthnMethodSessionRegistrationPage),
     ExitAndRegisterHolderAuthnMethod: memo(ExitAndRegisterHolderAuthnMethodPage),
-    GetHolderContractPrincipal: memo(GetHolderContractPrincipalPanel),
+    GetHolderContractAccounts: memo(GetHolderContractAccountsPanel),
+    CheckHolderContractPrincipals: memo(CheckHolderContractPrincipalsPanel),
     ObtainingIdentityAuthnMethods: memo(DeletingIdentityAuthnMethodsPanel),
     DeletingIdentityAuthnMethods: memo(DeletingIdentityAuthnMethodsPanel),
     NeedDeleteProtectedIdentityAuthnMethod: memo(NeedDeleteProtectedIdentityAuthnMethodPage),

@@ -31,7 +31,8 @@ export const CaptureStepsRow = () => {
             case 'ExitAndRegisterHolderAuthnMethod': {
                 return 2;
             }
-            case 'GetHolderContractPrincipal':
+            case 'GetHolderContractAccounts':
+            case 'CheckHolderContractPrincipals':
             case 'ObtainingIdentityAuthnMethods':
             case 'DeletingIdentityAuthnMethods':
             case 'NeedDeleteProtectedIdentityAuthnMethod':

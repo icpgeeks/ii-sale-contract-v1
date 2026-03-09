@@ -74,7 +74,7 @@ To activate the contract:
 2. Log in to the contract
 3. Enter the activation code
 
-This assigns ownership of the contract to you. 
+This assigns ownership of the contract to you.
 
 You must activate the contract using an Internet Identity that is different from the one you intend to sell.
 
@@ -183,6 +183,10 @@ No. The contract always transfers ownership of the entire Internet Identity.
 
 It is not possible to exclude specific assets or permissions from the sale. Everything controlled by the Identity is transferred together as a single unit.
 
+### Does the contract support Internet Identities with multiple accounts?
+
+Yes. Starting from version 1.1, the contract supports the Internet Identity multiple-accounts model and detects NNS assets across the different accounts of the same Identity.
+
 ### Which assets are supported?
 
 The contract detects and displays ICP accounts and ICP neurons that were created in the NNS using the Internet Identity being sold.
@@ -237,7 +241,7 @@ After the certificate expires, the current contract owner may be able to add a c
 
 ### Are there any restrictions or unsupported conditions?
 
-Yes. The Internet Identity Sale Contract enforces several restrictions. 
+Yes. The Internet Identity Sale Contract enforces several restrictions.
 
 Some conditions permanently block the sale for the current contract. In these cases, the Identity can only be transferred back out, and a new contract must be deployed to attempt another sale:
 
@@ -329,7 +333,7 @@ If the sale is completed, the contract transfers the proceeds to the payout addr
 
 ### What are the Fees?
 
-For this contract, the total fee is 2%. The exact fee parameters are defined by the contract template. A fee is charged only if the sale is completed. 
+For this contract, the total fee is 2%. The exact fee parameters are defined by the contract template. A fee is charged only if the sale is completed.
 
 The fee is distributed between three parties:
 
@@ -415,7 +419,7 @@ Validation does not guarantee that the contract is safe or bug-free. It does not
 
 #### 3. Buy or make an offer
 
-Purchases and offers are available only after the cooldown period ends. You can either buy the Internet Identity at the listed price or submit an offer using the OISY wallet. 
+Purchases and offers are available only after the cooldown period ends. You can either buy the Internet Identity at the listed price or submit an offer using the OISY wallet.
 
 Offers are made using APPROVE transactions. When submitting an offer, an ICP allowance is created with an expiration set before the contract’s certificate expires.
 

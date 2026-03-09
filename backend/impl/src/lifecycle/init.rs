@@ -12,6 +12,9 @@ fn init(args: InitContractArgs) {
     let env = factory::create_environment(args.root_public_key_raw.clone());
     let time = env.get_time().get_current_unix_epoch_time_millis();
     let cycles = env.get_ic().get_canister_metrics().cycles;
+    let settings = env.get_settings();
+    let ic_url = settings.ic_url.clone();
+    let nns_hostname = settings.nns_hostname.clone();
 
     let model = ContractModel::init(args, time, cycles);
 
@@ -20,8 +23,10 @@ fn init(args: InitContractArgs) {
 
     log_info!(
         get_env(),
-        "Identity contract: initialized with cycles: {}.",
-        cycles
+        "Identity contract: initialized with cycles: {}, IC url: {}, NNS hostname: {}",
+        cycles,
+        ic_url,
+        nns_hostname
     );
 }
 

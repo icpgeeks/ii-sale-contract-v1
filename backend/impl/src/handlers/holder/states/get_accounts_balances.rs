@@ -15,7 +15,7 @@ pub(crate) async fn process(
 ) -> Result<ProcessingResult, HolderProcessingError> {
     let account_identifier = get_holder_model(|_, model| {
         model
-            .fetching_assets
+            .fetching_nns_assets
             .as_ref()
             .unwrap()
             .accounts

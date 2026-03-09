@@ -15,10 +15,15 @@
 # dfx temporary files
 .dfx/
 .env
+.env.development
+.env.test
 
 # rust
 /target/
 /release/
+
+# generated factory files
+/generated/
 
 # frontend code
 node_modules/
@@ -26,3 +31,8 @@ dist/
 
 # dfinity snapshot files
 snapshot/
+
+# AI instructions
+dev/
+.github/
+.claude/

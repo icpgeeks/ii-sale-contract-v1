@@ -34,7 +34,8 @@ export const useOwnerCanCancelCapture = (): Result => {
             case 'ObtainingIdentityAuthnMethods':
             case 'DeletingIdentityAuthnMethods':
             case 'FinishCapture':
-            case 'GetHolderContractPrincipal':
+            case 'GetHolderContractAccounts':
+            case 'CheckHolderContractPrincipals':
             case 'NeedDeleteProtectedIdentityAuthnMethod': {
                 return defaultResult;
             }
