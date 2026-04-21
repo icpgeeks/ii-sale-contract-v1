@@ -74,6 +74,7 @@ const Content = ({record}: {record: ItemType}) => {
                         label={i18.holder.state.holding.common.neurons.modal.cachedNeuronStake}
                         value={formatTokenAmountWithSymbol(neuronInformation.cached_neuron_stake_e8s, ICPToken)}
                     />
+                    <EightYearGangBonusBase record={record} />
                     <DynamicKeyValueRow
                         label={i18.holder.state.holding.common.neurons.modal.stakedMaturityEquivalent}
                         value={formatTokenAmountWithSymbol(staked_maturity_e8s_equivalent_value, ICPToken)}
@@ -157,6 +158,19 @@ const AutoStakeMaturity = ({record}: {record: ItemType}) => {
         return v == true;
     }, [auto_stake_maturity]);
     return <BooleanKeyValueRow label={i18.holder.state.holding.common.neurons.modal.autoStakeMaturity} value={value} />;
+};
+
+const EightYearGangBonusBase = ({record}: {record: ItemType}) => {
+    const {
+        __rawNeuronInformation: {eight_year_gang_bonus_base_e8s}
+    } = record;
+    const value = fromNullable(eight_year_gang_bonus_base_e8s);
+    return (
+        <DynamicKeyValueRow
+            label={i18.holder.state.holding.common.neurons.modal.eightYearGangBonusBase}
+            value={formatTokenAmountWithSymbol(value ?? 0n, ICPToken)}
+        />
+    );
 };
 
 const PotentialVotingPower = ({record}: {record: ItemType}) => {

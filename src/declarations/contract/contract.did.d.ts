@@ -566,6 +566,7 @@ export interface NeuronAsset {
   'neuron_id' : bigint,
 }
 export interface NeuronInformation {
+  'eight_year_gang_bonus_base_e8s' : [] | [bigint],
   'staked_maturity_e8s_equivalent' : [] | [bigint],
   'controller' : [] | [Principal],
   'voting_power_refreshed_timestamp_seconds' : [] | [bigint],

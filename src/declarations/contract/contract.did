@@ -533,6 +533,7 @@ type MemoryMetrics = record {
 };
 type NeuronAsset = record { info : opt Timestamped; neuron_id : nat64 };
 type NeuronInformation = record {
+  eight_year_gang_bonus_base_e8s : opt nat64;
   staked_maturity_e8s_equivalent : opt nat64;
   controller : opt principal;
   voting_power_refreshed_timestamp_seconds : opt nat64;

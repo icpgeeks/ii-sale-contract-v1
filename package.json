@@ -47,6 +47,7 @@
         "@eslint/compat": "1.4.1",
         "@eslint/eslintrc": "3.3.1",
         "@eslint/js": "9.39.1",
+        "@rollup/rollup-linux-x64-gnu": "^4.60.2",
         "@types/node": "24.10.1",
         "@types/pubsub-js": "1.8.6",
         "@types/react": "18.3.18",

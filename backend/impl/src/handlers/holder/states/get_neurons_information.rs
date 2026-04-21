@@ -201,6 +201,7 @@ pub(crate) fn neuron_to_asset(
 ) -> NeuronInformation {
     let neuron_information = NeuronInformation {
         cached_neuron_stake_e8s: neuron.cached_neuron_stake_e8s,
+        eight_year_gang_bonus_base_e8s: neuron.eight_year_gang_bonus_base_e8s,
         maturity_e8s_equivalent: neuron.maturity_e8s_equivalent,
         staked_maturity_e8s_equivalent: neuron.staked_maturity_e8s_equivalent,
         auto_stake_maturity: neuron.auto_stake_maturity,

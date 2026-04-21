@@ -29,6 +29,7 @@ export const idlFactory = ({ IDL }) => {
     'age_seconds' : IDL.Nat64,
   });
   const NeuronInformation = IDL.Record({
+    'eight_year_gang_bonus_base_e8s' : IDL.Opt(IDL.Nat64),
     'staked_maturity_e8s_equivalent' : IDL.Opt(IDL.Nat64),
     'controller' : IDL.Opt(IDL.Principal),
     'voting_power_refreshed_timestamp_seconds' : IDL.Opt(IDL.Nat64),

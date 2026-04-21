@@ -617,6 +617,7 @@ This description does not cover all possible risks, limitations, or edge cases. 
                             agingSince: 'Aging Since',
                             total: 'Total',
                             cachedNeuronStake: 'Cached Neuron Stake',
+                            eightYearGangBonusBase: '8-Year Gang Bonus Base',
                             stakedMaturityEquivalent: 'Staked Maturity Equivalent',
                             maturityEquivalent: 'Maturity Equivalent',
                             neuronFees: 'Neuron Fees',

@@ -631,6 +631,7 @@ pub struct NeuronAsset {
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct NeuronInformation {
     pub cached_neuron_stake_e8s: TokenE8s,
+    pub eight_year_gang_bonus_base_e8s: Option<TokenE8s>,
     pub maturity_e8s_equivalent: TokenE8s,
     pub staked_maturity_e8s_equivalent: Option<TokenE8s>,
     pub auto_stake_maturity: Option<bool>,

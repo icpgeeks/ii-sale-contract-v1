@@ -49,6 +49,7 @@ fn fake_neuron_int(
         not_for_profit: true,
         maturity_e8s_equivalent,
         deciding_voting_power: None,
+        eight_year_gang_bonus_base_e8s: None,
         cached_neuron_stake_e8s,
         created_timestamp_seconds: 1111,
         auto_stake_maturity: None,

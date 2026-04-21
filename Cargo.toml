@@ -11,12 +11,12 @@ version = "1.1.0"
 edition = "2021"
 
 [workspace.dependencies]
-common_canister_types = { git = "https://github.com/geekfactory-core/common.git", tag = "0.0.2" }
-common_canister_api = { git = "https://github.com/geekfactory-core/common.git", tag = "0.0.2" }
-common_contract_api = { git = "https://github.com/geekfactory-core/common.git", tag = "0.0.2" }
-referral_c2c_client = { git = "https://github.com/geekfactory-core/common.git", tag = "0.0.2" }
-common_canister_impl = { git = "https://github.com/geekfactory-core/common.git", tag = "0.0.2" }
-common_embed_assets = { git = "https://github.com/geekfactory-core/common.git", tag = "0.0.2" }
+common_canister_types = { git = "https://github.com/geekfactory-core/common.git", tag = "0.0.3" }
+common_canister_api = { git = "https://github.com/geekfactory-core/common.git", tag = "0.0.3" }
+common_contract_api = { git = "https://github.com/geekfactory-core/common.git", tag = "0.0.3" }
+referral_c2c_client = { git = "https://github.com/geekfactory-core/common.git", tag = "0.0.3" }
+common_canister_impl = { git = "https://github.com/geekfactory-core/common.git", tag = "0.0.3" }
+common_embed_assets = { git = "https://github.com/geekfactory-core/common.git", tag = "0.0.3" }
 candid = "0.10.20"
 serde = "1.0.228"
 serde_cbor = "0.11.2"
@@ -55,8 +55,6 @@ secp256k1 = { version = "0.30.0" }
 regex = "1.12.2"
 num-bigint = "0.4.6"
 num-traits = "0.2.19"
-
-
 
 [profile.release]
 lto = true
