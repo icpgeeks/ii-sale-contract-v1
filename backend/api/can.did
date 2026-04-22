@@ -150,7 +150,7 @@ type CaptureProcessingEvent = variant {
     meta_data : vec record { text; text };
   };
   IdentityOpenidCredentialDeleted : record {
-    openid_credential_key : record { text; text };
+    openid_credential_key : record { text; text; text };
   };
   HolderContractPrincipalIsHolderOwner : record { account_number : opt nat64 };
   IdentityAuthnMethodRegistrationExited;
@@ -169,7 +169,7 @@ type CaptureProcessingEvent = variant {
   IdentityAuthnMethodsObtained : record {
     authn_pubkeys : vec blob;
     active_registration : bool;
-    openid_credentials : opt vec record { text; text };
+    openid_credentials : opt vec record { text; text; text };
   };
   HolderContractPrincipalCheckPassed;
   IdentityAPIChangeDetected;
@@ -199,7 +199,7 @@ type CaptureState = variant {
   DeletingIdentityAuthnMethods : record {
     authn_pubkeys : vec blob;
     active_registration : bool;
-    openid_credentials : opt vec record { text; text };
+    openid_credentials : opt vec record { text; text; text };
   };
   CheckHolderContractPrincipals : record {
     accounts_to_check : vec opt nat64;
@@ -533,7 +533,6 @@ type MemoryMetrics = record {
 };
 type NeuronAsset = record { info : opt Timestamped; neuron_id : nat64 };
 type NeuronInformation = record {
-  eight_year_gang_bonus_base_e8s : opt nat64;
   staked_maturity_e8s_equivalent : opt nat64;
   controller : opt principal;
   voting_power_refreshed_timestamp_seconds : opt nat64;
@@ -549,6 +548,7 @@ type NeuronInformation = record {
   aging_since_timestamp_seconds : nat64;
   account : blob;
   joined_community_fund_timestamp_seconds : opt nat64;
+  eight_year_gang_bonus_base_e8s : opt nat64;
   neuron_information_extended : opt NeuronInformationExtended;
   neuron_fees_e8s : nat64;
   visibility : opt int32;

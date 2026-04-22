@@ -66,7 +66,7 @@ const rawI18 = {
     toolbar: {
         title: {
             first: 'INTERNET IDENTITY',
-            second: 'SALE CONTRACT v1.1'
+            second: 'SALE CONTRACT v1.2'
         },
         menu: {
             home: 'Home',
@@ -617,11 +617,11 @@ This description does not cover all possible risks, limitations, or edge cases. 
                             agingSince: 'Aging Since',
                             total: 'Total',
                             cachedNeuronStake: 'Cached Neuron Stake',
-                            eightYearGangBonusBase: '8-Year Gang Bonus Base',
                             stakedMaturityEquivalent: 'Staked Maturity Equivalent',
                             maturityEquivalent: 'Maturity Equivalent',
                             neuronFees: 'Neuron Fees',
                             autoStakeMaturity: 'Auto Stake Maturity',
+                            eightYearGangBonusBase: '8-Year Gang Bonus Base',
                             potentialVotingPower: 'Potential Voting Power',
                             decidingVotingPower: 'Deciding Voting Power',
                             votingPowerRefreshedAt: 'Voting Power Refreshed At',

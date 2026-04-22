@@ -139,7 +139,7 @@ export type CaptureProcessingEvent = { 'HolderAuthnMethodRegistered' : null } |
   } |
   {
     'IdentityOpenidCredentialDeleted' : {
-      'openid_credential_key' : [string, string],
+      'openid_credential_key' : [string, string, string],
     }
   } |
   {
@@ -166,7 +166,7 @@ export type CaptureProcessingEvent = { 'HolderAuthnMethodRegistered' : null } |
     'IdentityAuthnMethodsObtained' : {
       'authn_pubkeys' : Array<Uint8Array | number[]>,
       'active_registration' : boolean,
-      'openid_credentials' : [] | [Array<[string, string]>],
+      'openid_credentials' : [] | [Array<[string, string, string]>],
     }
   } |
   { 'HolderContractPrincipalCheckPassed' : null } |
@@ -206,7 +206,7 @@ export type CaptureState = { 'CaptureFailed' : { 'error' : CaptureError } } |
     'DeletingIdentityAuthnMethods' : {
       'authn_pubkeys' : Array<Uint8Array | number[]>,
       'active_registration' : boolean,
-      'openid_credentials' : [] | [Array<[string, string]>],
+      'openid_credentials' : [] | [Array<[string, string, string]>],
     }
   } |
   {
@@ -566,7 +566,6 @@ export interface NeuronAsset {
   'neuron_id' : bigint,
 }
 export interface NeuronInformation {
-  'eight_year_gang_bonus_base_e8s' : [] | [bigint],
   'staked_maturity_e8s_equivalent' : [] | [bigint],
   'controller' : [] | [Principal],
   'voting_power_refreshed_timestamp_seconds' : [] | [bigint],
@@ -582,6 +581,7 @@ export interface NeuronInformation {
   'aging_since_timestamp_seconds' : bigint,
   'account' : Uint8Array | number[],
   'joined_community_fund_timestamp_seconds' : [] | [bigint],
+  'eight_year_gang_bonus_base_e8s' : [] | [bigint],
   'neuron_information_extended' : [] | [NeuronInformationExtended],
   'neuron_fees_e8s' : bigint,
   'visibility' : [] | [number],
