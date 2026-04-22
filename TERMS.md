@@ -1,4 +1,4 @@
-# Internet Identity Sale Contract v1.1 — Terms of Use
+# Internet Identity Sale Contract v1.2 — Terms of Use
 
 Last updated: 2026-03-09
 

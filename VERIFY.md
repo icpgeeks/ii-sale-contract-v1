@@ -15,7 +15,7 @@ Releases are built using a [reproducible build](https://docs.internetcomputer.or
 1. Check out the source code by release tag:
 
 ```bash
-git checkout 1.1.0
+git checkout 1.2.0
 ```
 
 2. Run the build script:
