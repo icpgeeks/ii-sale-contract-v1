@@ -266,7 +266,7 @@ dependencies = [
 [[package]]
 name = "common_canister_api"
 version = "0.0.2"
-source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.2#d1bb1f38ce0620991162a3b8269bcc66164fa70d"
+source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.3#18f3636b2fe8723949bb374bbad3f1aca46c2c12"
 dependencies = [
  "candid",
  "common_canister_types",
@@ -277,7 +277,7 @@ dependencies = [
 [[package]]
 name = "common_canister_impl"
 version = "0.0.2"
-source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.2#d1bb1f38ce0620991162a3b8269bcc66164fa70d"
+source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.3#18f3636b2fe8723949bb374bbad3f1aca46c2c12"
 dependencies = [
  "async-trait",
  "candid",
@@ -308,7 +308,7 @@ dependencies = [
 [[package]]
 name = "common_canister_types"
 version = "0.0.2"
-source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.2#d1bb1f38ce0620991162a3b8269bcc66164fa70d"
+source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.3#18f3636b2fe8723949bb374bbad3f1aca46c2c12"
 dependencies = [
  "candid",
  "serde",
@@ -318,7 +318,7 @@ dependencies = [
 [[package]]
 name = "common_contract_api"
 version = "0.0.2"
-source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.2#d1bb1f38ce0620991162a3b8269bcc66164fa70d"
+source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.3#18f3636b2fe8723949bb374bbad3f1aca46c2c12"
 dependencies = [
  "candid",
  "common_canister_types",
@@ -329,7 +329,7 @@ dependencies = [
 [[package]]
 name = "common_embed_assets"
 version = "0.0.2"
-source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.2#d1bb1f38ce0620991162a3b8269bcc66164fa70d"
+source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.3#18f3636b2fe8723949bb374bbad3f1aca46c2c12"
 dependencies = [
  "brotli",
  "flate2",
@@ -349,7 +349,7 @@ checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
 
 [[package]]
 name = "contract_canister_api"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "candid",
  "common_canister_types",
@@ -359,7 +359,7 @@ dependencies = [
 
 [[package]]
 name = "contract_canister_candid"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "candid",
  "common_canister_api",
@@ -370,7 +370,7 @@ dependencies = [
 
 [[package]]
 name = "contract_canister_impl"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -1358,7 +1358,7 @@ dependencies = [
 [[package]]
 name = "referral_c2c_client"
 version = "0.0.2"
-source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.2#d1bb1f38ce0620991162a3b8269bcc66164fa70d"
+source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.3#18f3636b2fe8723949bb374bbad3f1aca46c2c12"
 dependencies = [
  "candid",
  "ic-cdk",
@@ -1369,7 +1369,7 @@ dependencies = [
 [[package]]
 name = "referral_canister_api"
 version = "0.0.2"
-source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.2#d1bb1f38ce0620991162a3b8269bcc66164fa70d"
+source = "git+https://github.com/geekfactory-core/common.git?tag=0.0.3#18f3636b2fe8723949bb374bbad3f1aca46c2c12"
 dependencies = [
  "candid",
  "common_canister_types",

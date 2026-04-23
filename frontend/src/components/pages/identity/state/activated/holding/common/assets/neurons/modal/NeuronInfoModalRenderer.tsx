@@ -1,4 +1,4 @@
-import {fromNullable, ICPToken, isNullish} from '@dfinity/utils';
+import {fromNullable, ICPToken, isNullish, nonNullish} from '@dfinity/utils';
 import {Flex, Modal, Typography} from 'antd';
 import {KeyValueRow} from 'frontend/src/components/widgets/KeyValueRow';
 import {LinkButton} from 'frontend/src/components/widgets/button/LinkButton';
@@ -84,6 +84,7 @@ const Content = ({record}: {record: ItemType}) => {
                     />
                     <DynamicKeyValueRow label={i18.holder.state.holding.common.neurons.modal.neuronFees} value={formatTokenAmountWithSymbol(neuronInformation.neuron_fees_e8s, ICPToken)} />
                     <AutoStakeMaturity record={record} />
+                    <EightYearGangBonusBase record={record} />
                 </Flex>
                 <Flex vertical gap={8}>
                     <PotentialVotingPower record={record} />
@@ -157,6 +158,14 @@ const AutoStakeMaturity = ({record}: {record: ItemType}) => {
         return v == true;
     }, [auto_stake_maturity]);
     return <BooleanKeyValueRow label={i18.holder.state.holding.common.neurons.modal.autoStakeMaturity} value={value} />;
+};
+
+const EightYearGangBonusBase = ({record}: {record: ItemType}) => {
+    const {
+        __rawNeuronInformation: {eight_year_gang_bonus_base_e8s}
+    } = record;
+    const value = fromNullable(eight_year_gang_bonus_base_e8s);
+    return <DynamicKeyValueRow label={i18.holder.state.holding.common.neurons.modal.eightYearGangBonusBase} value={nonNullish(value) ? formatTokenAmountWithSymbol(value, ICPToken) : UNSPECIFIED} />;
 };
 
 const PotentialVotingPower = ({record}: {record: ItemType}) => {

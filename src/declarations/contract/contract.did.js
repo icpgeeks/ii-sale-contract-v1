@@ -44,6 +44,7 @@ export const idlFactory = ({ IDL }) => {
     'aging_since_timestamp_seconds' : IDL.Nat64,
     'account' : IDL.Vec(IDL.Nat8),
     'joined_community_fund_timestamp_seconds' : IDL.Opt(IDL.Nat64),
+    'eight_year_gang_bonus_base_e8s' : IDL.Opt(IDL.Nat64),
     'neuron_information_extended' : IDL.Opt(NeuronInformationExtended),
     'neuron_fees_e8s' : IDL.Nat64,
     'visibility' : IDL.Opt(IDL.Int32),
@@ -227,7 +228,9 @@ export const idlFactory = ({ IDL }) => {
     'DeletingIdentityAuthnMethods' : IDL.Record({
       'authn_pubkeys' : IDL.Vec(IDL.Vec(IDL.Nat8)),
       'active_registration' : IDL.Bool,
-      'openid_credentials' : IDL.Opt(IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))),
+      'openid_credentials' : IDL.Opt(
+        IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text, IDL.Text))
+      ),
     }),
     'CheckHolderContractPrincipals' : IDL.Record({
       'accounts_to_check' : IDL.Vec(IDL.Opt(IDL.Nat64)),
@@ -636,7 +639,7 @@ export const idlFactory = ({ IDL }) => {
       'meta_data' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text)),
     }),
     'IdentityOpenidCredentialDeleted' : IDL.Record({
-      'openid_credential_key' : IDL.Tuple(IDL.Text, IDL.Text),
+      'openid_credential_key' : IDL.Tuple(IDL.Text, IDL.Text, IDL.Text),
     }),
     'HolderContractPrincipalIsHolderOwner' : IDL.Record({
       'account_number' : IDL.Opt(IDL.Nat64),
@@ -657,7 +660,9 @@ export const idlFactory = ({ IDL }) => {
     'IdentityAuthnMethodsObtained' : IDL.Record({
       'authn_pubkeys' : IDL.Vec(IDL.Vec(IDL.Nat8)),
       'active_registration' : IDL.Bool,
-      'openid_credentials' : IDL.Opt(IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))),
+      'openid_credentials' : IDL.Opt(
+        IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text, IDL.Text))
+      ),
     }),
     'HolderContractPrincipalCheckPassed' : IDL.Null,
     'IdentityAPIChangeDetected' : IDL.Null,

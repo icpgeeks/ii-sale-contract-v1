@@ -1,8 +1,13 @@
-# Internet Identity Sale Contract v1.1
+# Internet Identity Sale Contract v1.2
 
 This single-use smart contract enables trustless sale of an entire Internet Identity along with all linked assets, accounts, permissions, and dapp accesses. It provides key functionality like listing, offers, validation, ownership transfer, and payments. The contract is issued with a cryptographic certificate, which makes it fully immutable for the entire certification period.
 
 ## What's New
+
+### Version 1.2
+
+- Added support for displaying 8-Year Gang Bonus in neuron details.
+- Fixed OpenID credential identification by including the audience claim.
 
 ### Version 1.1
 

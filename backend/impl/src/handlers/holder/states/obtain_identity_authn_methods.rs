@@ -128,7 +128,9 @@ pub(crate) async fn process(
         identity_info.openid_credentials.as_ref().map(|creds| {
             creds
                 .iter()
-                .map(|cred| OpenIdCredentialKey(cred.iss.clone(), cred.sub.clone()))
+                .map(|cred| {
+                    OpenIdCredentialKey(cred.iss.clone(), cred.sub.clone(), cred.aud.clone())
+                })
                 .collect::<Vec<_>>()
         })
     );
@@ -161,7 +163,7 @@ pub(crate) async fn process(
                     active_registration: identity_info.authn_method_registration.is_some(),
                     openid_credentials: identity_info.openid_credentials.map(|v| {
                         v.into_iter()
-                            .map(|cred| OpenIdCredentialKey(cred.iss, cred.sub))
+                            .map(|cred| OpenIdCredentialKey(cred.iss, cred.sub, cred.aud))
                             .collect()
                     }),
                 },
