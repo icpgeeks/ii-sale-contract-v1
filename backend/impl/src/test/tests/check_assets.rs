@@ -382,5 +382,5 @@ async fn test_neuron_lists_length() {
     };
 
     let slice = Encode!(&response).unwrap();
-    assert_eq!(slice.len(), 3612);
+    assert_eq!(slice.len(), 3642);
 }

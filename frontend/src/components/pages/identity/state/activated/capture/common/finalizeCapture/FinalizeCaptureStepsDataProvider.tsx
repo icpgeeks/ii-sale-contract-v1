@@ -84,7 +84,8 @@ const getStepFromCaptureState = (subState: CaptureState): CaptureStep => {
             if (captureSubStateType === 'DeletingIdentityAuthnMethods') {
                 const numberOfAuthnPubkeys = union.state.authn_pubkeys.length;
                 const numberOfOpenIdCredentials = fromNullishNullable(union.state.openid_credentials)?.length ?? 0;
-                result.passkeysLeft = numberOfAuthnPubkeys + numberOfOpenIdCredentials;
+                const numberOfEmailRecoveryAddresses = union.state.email_recovery_addresses.length;
+                result.passkeysLeft = numberOfAuthnPubkeys + numberOfOpenIdCredentials + numberOfEmailRecoveryAddresses;
             }
             return result;
         }

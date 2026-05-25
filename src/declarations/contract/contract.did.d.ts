@@ -138,6 +138,11 @@ export type CaptureProcessingEvent = { 'HolderAuthnMethodRegistered' : null } |
     }
   } |
   {
+    'IdentityEmailRecoveryDeleted' : {
+      'address' : string,
+    }
+  } |
+  {
     'IdentityOpenidCredentialDeleted' : {
       'openid_credential_key' : [string, string, string],
     }
@@ -165,6 +170,7 @@ export type CaptureProcessingEvent = { 'HolderAuthnMethodRegistered' : null } |
   {
     'IdentityAuthnMethodsObtained' : {
       'authn_pubkeys' : Array<Uint8Array | number[]>,
+      'email_recovery_addresses' : Array<string>,
       'active_registration' : boolean,
       'openid_credentials' : [] | [Array<[string, string, string]>],
     }
@@ -205,6 +211,7 @@ export type CaptureState = { 'CaptureFailed' : { 'error' : CaptureError } } |
   {
     'DeletingIdentityAuthnMethods' : {
       'authn_pubkeys' : Array<Uint8Array | number[]>,
+      'email_recovery_addresses' : Array<string>,
       'active_registration' : boolean,
       'openid_credentials' : [] | [Array<[string, string, string]>],
     }

@@ -5,8 +5,9 @@ use common_canister_impl::components::{
         AuthnMethodConfirmationError, AuthnMethodData, AuthnMethodRegisterError,
         AuthnMethodRegisterRet, AuthnMethodRegistrationModeEnterRet,
         AuthnMethodRegistrationModeExitError, AuthnMethodRegistrationModeExitRet,
-        AuthnMethodRemoveRet, GetAccountsError, IdentityInfo, IdentityInfoRet, MetadataMapV2,
-        PrepareAccountDelegation, PrepareAccountDelegationRet,
+        AuthnMethodRemoveRet, EmailRecoveryCredential, EmailRecoveryCredentialRemoveRet,
+        GetAccountsError, IdentityInfo, IdentityInfoRet, MetadataMapV2, PrepareAccountDelegation,
+        PrepareAccountDelegationRet,
     },
     nns::api::ListNeuronsResponse,
     nns_dap::api::{AccountDetails, GetAccountResponse},
@@ -179,6 +180,12 @@ pub(crate) fn mock_authn_method_remove_err() {
     set_test_ic_agent_response(Encode!(&AuthnMethodRemoveRet::Err).unwrap());
 }
 
+/// Mocks IC agent response: email recovery removal succeeded.
+pub(crate) fn mock_email_recovery_remove_ok() {
+    let result: EmailRecoveryCredentialRemoveRet = Ok(());
+    set_test_ic_agent_response(Encode!(&result).unwrap());
+}
+
 /// Mocks IC agent response: authn method registration failed with the given error.
 pub(crate) fn mock_authn_method_register_err(error: AuthnMethodRegisterError) {
     set_test_ic_agent_response(Encode!(&AuthnMethodRegisterRet::Err(error)).unwrap());
@@ -236,6 +243,25 @@ pub(crate) fn mock_identity_info_ok(authn_methods: Vec<AuthnMethodData>) {
             metadata: Box::new(MetadataMapV2(vec![])),
             authn_method_registration: None,
             openid_credentials: None,
+            email_recovery: vec![],
+            name: None,
+            created_at: None,
+        }))
+        .unwrap(),
+    );
+}
+
+pub(crate) fn mock_identity_info_ok_with_email_recovery(
+    authn_methods: Vec<AuthnMethodData>,
+    email_recovery: Vec<EmailRecoveryCredential>,
+) {
+    set_test_ic_agent_response(
+        Encode!(&IdentityInfoRet::Ok(IdentityInfo {
+            authn_methods,
+            metadata: Box::new(MetadataMapV2(vec![])),
+            authn_method_registration: None,
+            openid_credentials: None,
+            email_recovery,
             name: None,
             created_at: None,
         }))
