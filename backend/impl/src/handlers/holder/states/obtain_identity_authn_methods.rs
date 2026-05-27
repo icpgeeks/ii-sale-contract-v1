@@ -103,6 +103,13 @@ pub(crate) async fn process(
         return holder_authn_method_lost(env, lock);
     }
 
+    let email_recovery_addresses: Vec<String> = identity_info
+        .email_recovery
+        .unwrap_or_default()
+        .into_iter()
+        .map(|credential| credential.address)
+        .collect();
+
     log_info!(
         env,
         "Identity authn methods: auth_pubkeys({}): {:?}",
@@ -137,12 +144,8 @@ pub(crate) async fn process(
     log_info!(
         env,
         "Identity authn methods: email recovery({}): {:?}",
-        identity_info.email_recovery.len(),
-        identity_info
-            .email_recovery
-            .iter()
-            .map(|credential| credential.address.clone())
-            .collect::<Vec<_>>()
+        email_recovery_addresses.len(),
+        email_recovery_addresses
     );
 
     if authn_pubkeys.is_empty()
@@ -152,7 +155,7 @@ pub(crate) async fn process(
             .as_ref()
             .filter(|creds| !creds.is_empty())
             .is_none()
-        && identity_info.email_recovery.is_empty()
+        && email_recovery_addresses.is_empty()
     {
         // ALL AUTHN METHODS and OPENID CREDENTIALS and EMAIL RECOVERY and METHOD REGISTRATION DELETED
         log_info!(env, "All identity authn methods deleted!");
@@ -177,11 +180,7 @@ pub(crate) async fn process(
                             .map(|cred| OpenIdCredentialKey(cred.iss, cred.sub, cred.aud))
                             .collect()
                     }),
-                    email_recovery_addresses: identity_info
-                        .email_recovery
-                        .into_iter()
-                        .map(|credential| credential.address)
-                        .collect(),
+                    email_recovery_addresses,
                 },
             },
         )?;

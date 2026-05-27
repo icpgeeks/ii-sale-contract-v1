@@ -243,7 +243,7 @@ pub(crate) fn mock_identity_info_ok(authn_methods: Vec<AuthnMethodData>) {
             metadata: Box::new(MetadataMapV2(vec![])),
             authn_method_registration: None,
             openid_credentials: None,
-            email_recovery: vec![],
+            email_recovery: None,
             name: None,
             created_at: None,
         }))
@@ -261,7 +261,7 @@ pub(crate) fn mock_identity_info_ok_with_email_recovery(
             metadata: Box::new(MetadataMapV2(vec![])),
             authn_method_registration: None,
             openid_credentials: None,
-            email_recovery,
+            email_recovery: Some(email_recovery),
             name: None,
             created_at: None,
         }))

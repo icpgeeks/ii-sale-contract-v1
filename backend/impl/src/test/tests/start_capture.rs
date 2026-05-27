@@ -161,7 +161,7 @@ async fn test_check_openid_credentials_present() {
             metadata: Box::new(MetadataMapV2(vec![])),
             last_usage_timestamp: Some(121),
         }]),
-        email_recovery: vec![],
+        email_recovery: None,
         name: Some("John Doe".to_string()),
         created_at: Some(1212),
     });
@@ -196,7 +196,7 @@ async fn test_identity_api_changed() {
         pub metadata: Box<MetadataMapV2>,
         pub authn_method_registration: Option<AuthnMethodRegistrationInfo>,
         pub openid_credentials: Option<Vec<OpenIdCredentialNew>>,
-        pub email_recovery: Vec<EmailRecoveryCredential>,
+        pub email_recovery: Option<Vec<EmailRecoveryCredential>>,
         pub name: Option<String>,
         pub created_at: Option<Timestamp>,
     }
@@ -268,7 +268,7 @@ async fn test_identity_api_changed() {
                 metadata: Box::new(MetadataMapV2(vec![])),
                 last_usage_timestamp: None,
             }]),
-            email_recovery: vec![],
+            email_recovery: None,
             name: None,
             created_at: None,
         }))

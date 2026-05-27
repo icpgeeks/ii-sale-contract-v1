@@ -26,6 +26,13 @@ export interface BlockContractTemplateArgs {
   'contract_template_id' : bigint,
   'reason' : string,
 }
+export interface BlockContractsArgs {
+  'contract_canister_ids' : Array<Principal>,
+  'reason' : string,
+}
+export type BlockContractsError = { 'PermissionDenied' : null };
+export type BlockContractsResponse = { 'Ok' : null } |
+  { 'Err' : BlockContractsError };
 export type BlockContractTemplateError = { 'ContractTemplateNotFound' : null } |
   { 'PermissionDenied' : null } |
   { 'ContractTemplateAlreadyBlocked' : null };
@@ -484,6 +491,7 @@ export interface ObtainContractCertificateResult {
   'certificate' : SignedContractCertificate,
 }
 export type Permission = { 'AddContractTemplate' : null } |
+  { 'BlockContract' : null } |
   { 'BlockContractTemplate' : null } |
   { 'SetAccessRights' : null } |
   { 'SetConfig' : null };
@@ -559,6 +567,7 @@ export interface ValidateContractCertificateArgs {
 export type ValidateContractCertificateError = {
     'CertificateWrong' : { 'reason' : string }
   } |
+  { 'ContractBlocked' : { 'reason' : string } } |
   { 'ContractInfoUnavailable' : null } |
   { 'InvalidContractReferenceUrl' : null } |
   { 'ValidateContractUrlUnavailable' : { 'reason' : string } } |
@@ -576,6 +585,7 @@ export interface _SERVICE {
     [AddContractTemplateArgs],
     AddContractTemplateResponse
   >,
+  'block_contracts' : ActorMethod<[BlockContractsArgs], BlockContractsResponse>,
   'block_contract_template' : ActorMethod<
     [BlockContractTemplateArgs],
     BlockContractTemplateResponse
