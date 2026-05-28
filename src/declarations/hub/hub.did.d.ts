@@ -102,6 +102,11 @@ export interface Config {
   'regex_for_contract_principal_parsing' : Array<string>,
   'max_deployment_events_per_chunk' : bigint,
 }
+export type ContractBlockFilter =
+  { 'ByDeploymentId' : GetContractActivationCodeArgs } |
+  { 'ByContractCanisterId' : { 'canister_id' : Principal } };
+export interface GetContractBlockStatusArgs { 'filter' : ContractBlockFilter }
+export interface GetContractBlockStatusResult { 'blocked' : [] | [Timestamped] }
 export interface ContractCertificate {
   'deployer' : Principal,
   'contract_canister' : Principal,
@@ -567,7 +572,6 @@ export interface ValidateContractCertificateArgs {
 export type ValidateContractCertificateError = {
     'CertificateWrong' : { 'reason' : string }
   } |
-  { 'ContractBlocked' : { 'reason' : string } } |
   { 'ContractInfoUnavailable' : null } |
   { 'InvalidContractReferenceUrl' : null } |
   { 'ValidateContractUrlUnavailable' : { 'reason' : string } } |
@@ -599,6 +603,10 @@ export interface _SERVICE {
   'get_canister_metrics' : ActorMethod<[{}], GetCanisterMetricsResponse>,
   'get_canister_status' : ActorMethod<[], GetCanisterStatusResponse>,
   'get_config' : ActorMethod<[{}], GetConfigResponse>,
+  'get_contract_block_status' : ActorMethod<
+    [GetContractBlockStatusArgs],
+    GetContractBlockStatusResult
+  >,
   'get_contract_activation_code' : ActorMethod<
     [GetContractActivationCodeArgs],
     GetContractActivationCodeResponse

@@ -5,7 +5,10 @@ import type {ICHookReturn} from 'frontend/src/utils/ic/api/useICCallTypedFor';
 import {createContext, useContext, useEffect, useMemo, type PropsWithChildren} from 'react';
 import {apiLogger} from '../logger/logger';
 
-type Context = ICHookReturn<HubAnonymousCanister, 'getContractTemplate'>;
+type ContractTemplateContext = ICHookReturn<HubAnonymousCanister, 'getContractTemplate'>;
+type Context = {
+    hubContractTemplate: ContractTemplateContext;
+};
 
 const Context = createContext<Context | undefined>(undefined);
 export const useHubContractTemplateContext = () => {
@@ -22,16 +25,16 @@ type Props = {
 };
 export const HubContractTemplateProvider = (props: PropsWithChildren<Props>) => {
     const {hubCanisterId, contractTemplateId} = props;
-    const hubContract = useICCanisterCallHubAnonymous(hubCanisterId, 'getContractTemplate');
-    const {call} = hubContract;
+    const hubContractTemplate = useICCanisterCallHubAnonymous(hubCanisterId, 'getContractTemplate');
+    const {call: callContractTemplate} = hubContractTemplate;
 
     useEffect(() => {
         if (nonNullish(contractTemplateId)) {
-            call([{contractTemplateId: contractTemplateId, certified: false}], {logger: apiLogger, logMessagePrefix: `useHubContract:`});
+            callContractTemplate([{contractTemplateId: contractTemplateId, certified: false}], {logger: apiLogger, logMessagePrefix: `useHubContractTemplate:`});
         }
-    }, [hubCanisterId, contractTemplateId, call]);
+    }, [hubCanisterId, contractTemplateId, callContractTemplate]);
 
-    const value: Context = useMemo(() => hubContract, [hubContract]);
+    const value: Context = useMemo(() => ({hubContractTemplate}), [hubContractTemplate]);
 
     return <Context.Provider value={value}>{props.children}</Context.Provider>;
 };

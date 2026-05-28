@@ -81,6 +81,16 @@ export const idlFactory = ({ IDL }) => {
     'value' : IDL.Text,
     'timestamp' : IDL.Nat64,
   });
+  const ContractBlockFilter = IDL.Variant({
+    'ByDeploymentId' : GetContractActivationCodeArgs,
+    'ByContractCanisterId' : IDL.Record({ 'canister_id' : IDL.Principal }),
+  });
+  const GetContractBlockStatusArgs = IDL.Record({
+    'filter' : ContractBlockFilter,
+  });
+  const GetContractBlockStatusResult = IDL.Record({
+    'blocked' : IDL.Opt(Timestamped),
+  });
   const ContractCertificate = IDL.Record({
     'deployer' : IDL.Principal,
     'contract_canister' : IDL.Principal,
@@ -659,7 +669,6 @@ export const idlFactory = ({ IDL }) => {
   });
   const ValidateContractCertificateError = IDL.Variant({
     'CertificateWrong' : IDL.Record({ 'reason' : IDL.Text }),
-    'ContractBlocked' : IDL.Record({ 'reason' : IDL.Text }),
     'ContractInfoUnavailable' : IDL.Null,
     'InvalidContractReferenceUrl' : IDL.Null,
     'ValidateContractUrlUnavailable' : IDL.Record({ 'reason' : IDL.Text }),
@@ -707,6 +716,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'get_canister_status' : IDL.Func([], [GetCanisterStatusResponse], []),
     'get_config' : IDL.Func([IDL.Record({})], [GetConfigResponse], ['query']),
+    'get_contract_block_status' : IDL.Func(
+        [GetContractBlockStatusArgs],
+        [GetContractBlockStatusResult],
+        ['query'],
+      ),
     'get_contract_activation_code' : IDL.Func(
         [GetContractActivationCodeArgs],
         [GetContractActivationCodeResponse],
