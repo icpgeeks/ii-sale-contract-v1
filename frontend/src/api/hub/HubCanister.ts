@@ -33,6 +33,6 @@ export class HubAnonymousCanister extends Canister<HubService> {
     };
 
     getContractBlockStatus = async (params: GetContractBlockStatusParams) => {
-        return await this.caller(params).get_contract_block_status({filter: params.filter});
+        return await this.caller(params).get_contract_block_status(params);
     };
 }

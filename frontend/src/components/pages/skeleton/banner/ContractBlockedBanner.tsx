@@ -4,13 +4,10 @@ import {Flex} from 'antd';
 import {ErrorAlert} from 'frontend/src/components/widgets/alert/ErrorAlert';
 import {ExternalLinkToFAQAsQuestionMark} from 'frontend/src/components/widgets/ExternalLinkToFAQAsQuestionMark';
 import {useContractCertificateContext} from 'frontend/src/context/certificate/ContractCertificateProvider';
-import {useCanisterContext} from 'frontend/src/context/canister/CanisterProvider';
+import {HubContractBlockStatusProvider, useHubContractBlockStatusContext} from 'frontend/src/context/hub/HubContractBlockStatusProvider';
 import {HubContractTemplateProvider, useHubContractTemplateContext} from 'frontend/src/context/hub/HubContractTemplateProvider';
-import {apiLogger} from 'frontend/src/context/logger/logger';
 import {i18} from 'frontend/src/i18';
-import {safeCall} from 'frontend/src/utils/ic/api/safeCall';
-import type {GetContractBlockStatusResult} from 'src/declarations/hub/hub.did';
-import {useEffect, useMemo, useState} from 'react';
+import {useMemo} from 'react';
 
 export const ContractBlockedBanner = () => {
     const {contractCertificate} = useContractCertificateContext();
@@ -27,49 +24,23 @@ export const ContractBlockedBanner = () => {
     }
 
     return (
-        <HubContractTemplateProvider hubCanisterId={hubCanisterId} contractTemplateId={contractTemplateId}>
-            <Content hubCanisterId={hubCanisterId} contractCanisterId={contractCanisterId} />
+        <HubContractTemplateProvider key={`${hubCanisterId}:${contractTemplateId}:${contractCanisterId.toText()}`} hubCanisterId={hubCanisterId} contractTemplateId={contractTemplateId}>
+            <HubContractBlockStatusProvider hubCanisterId={hubCanisterId} contractCanisterId={contractCanisterId}>
+                <Content />
+            </HubContractBlockStatusProvider>
         </HubContractTemplateProvider>
     );
 };
 
-const Content = ({hubCanisterId, contractCanisterId}: {hubCanisterId: string; contractCanisterId: Principal}) => {
+const Content = () => {
     const {hubContractTemplate} = useHubContractTemplateContext();
-    const {getHubAnonymousCanister} = useCanisterContext();
-    const [contractBlockStatus, setContractBlockStatus] = useState<GetContractBlockStatusResult | undefined>(undefined);
-
-    useEffect(() => {
-        let cancelled = false;
-
-        setContractBlockStatus(undefined);
-
-        void (async () => {
-            const actor = await getHubAnonymousCanister(hubCanisterId);
-            const call = safeCall(actor.getContractBlockStatus.bind(actor), {logger: apiLogger, logMessagePrefix: 'useHubContractBlockStatus:'});
-            const response = await call({
-                filter: {
-                    ByContractCanisterId: {
-                        canister_id: contractCanisterId
-                    }
-                },
-                certified: false
-            });
-
-            if (!cancelled && 'Ok' in response) {
-                setContractBlockStatus(response.Ok);
-            }
-        })();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [getHubAnonymousCanister, hubCanisterId, contractCanisterId]);
+    const {hubContractBlockStatus} = useHubContractBlockStatusContext();
 
     const isBlocked = useMemo(() => {
         const templateBlocked = nonNullish(hubContractTemplate.data) && nonNullish(fromNullable(hubContractTemplate.data.contract_template.blocked));
-        const contractBlocked = nonNullish(contractBlockStatus) && nonNullish(fromNullable(contractBlockStatus.blocked));
+        const contractBlocked = nonNullish(hubContractBlockStatus.data) && nonNullish(fromNullable(hubContractBlockStatus.data.blocked));
         return templateBlocked || contractBlocked;
-    }, [hubContractTemplate.data, contractBlockStatus]);
+    }, [hubContractTemplate.data, hubContractBlockStatus.data]);
 
     if (!isBlocked) {
         return null;

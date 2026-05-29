@@ -639,9 +639,7 @@ export const idlFactory = ({ IDL }) => {
       'public_key' : IDL.Vec(IDL.Nat8),
       'meta_data' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text)),
     }),
-    'IdentityEmailRecoveryDeleted' : IDL.Record({
-      'address' : IDL.Text,
-    }),
+    'IdentityEmailRecoveryDeleted' : IDL.Record({ 'address' : IDL.Text }),
     'IdentityOpenidCredentialDeleted' : IDL.Record({
       'openid_credential_key' : IDL.Tuple(IDL.Text, IDL.Text, IDL.Text),
     }),

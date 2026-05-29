@@ -1,13 +1,13 @@
-import type {ActorMethod} from '@dfinity/agent';
-import type {IDL} from '@dfinity/candid';
-import type {Principal} from '@dfinity/principal';
+import type { Principal } from '@dfinity/principal';
+import type { ActorMethod } from '@dfinity/agent';
+import type { IDL } from '@dfinity/candid';
 
 export interface AccessRight {
   'permissions' : [] | [Array<Permission>],
   'description' : [] | [string],
   'caller' : Principal,
 }
-export interface AddContractTemplateArgs { 
+export interface AddContractTemplateArgs {
   'contract_template_definition' : ContractTemplateDefinition,
 }
 export type AddContractTemplateError = { 'GrantNotFound' : null } |
@@ -26,18 +26,19 @@ export interface BlockContractTemplateArgs {
   'contract_template_id' : bigint,
   'reason' : string,
 }
+export type BlockContractTemplateError = { 'ContractTemplateNotFound' : null } |
+  { 'PermissionDenied' : null } |
+  { 'ContractTemplateAlreadyBlocked' : null };
+export type BlockContractTemplateResponse = { 'Ok' : null } |
+  { 'Err' : BlockContractTemplateError };
 export interface BlockContractsArgs {
+  'deployment_ids' : BigUint64Array | bigint[],
   'contract_canister_ids' : Array<Principal>,
   'reason' : string,
 }
 export type BlockContractsError = { 'PermissionDenied' : null };
 export type BlockContractsResponse = { 'Ok' : null } |
   { 'Err' : BlockContractsError };
-export type BlockContractTemplateError = { 'ContractTemplateNotFound' : null } |
-  { 'PermissionDenied' : null } |
-  { 'ContractTemplateAlreadyBlocked' : null };
-export type BlockContractTemplateResponse = { 'Ok' : null } |
-  { 'Err' : BlockContractTemplateError };
 export interface CancelDeploymentArgs {
   'deployment_id' : bigint,
   'reason' : string,
@@ -102,11 +103,10 @@ export interface Config {
   'regex_for_contract_principal_parsing' : Array<string>,
   'max_deployment_events_per_chunk' : bigint,
 }
-export type ContractBlockFilter =
-  { 'ByDeploymentId' : GetContractActivationCodeArgs } |
+export type ContractBlockFilter = {
+    'ByDeploymentId' : GetContractActivationCodeArgs
+  } |
   { 'ByContractCanisterId' : { 'canister_id' : Principal } };
-export interface GetContractBlockStatusArgs { 'filter' : ContractBlockFilter }
-export interface GetContractBlockStatusResult { 'blocked' : [] | [Timestamped] }
 export interface ContractCertificate {
   'deployer' : Principal,
   'contract_canister' : Principal,
@@ -137,10 +137,12 @@ export interface ContractTemplateInformation {
   'definition' : ContractTemplateDefinition,
   'contract_template_id' : bigint,
   'registered' : bigint,
+  'retired' : [] | [Timestamped],
 }
 export interface ContractTemplatesFilter {
   'blocked' : [] | [boolean],
   'filter' : [] | [string],
+  'retired' : [] | [boolean],
 }
 export type ContractTemplatesSortingKey = { 'DeploymentsCount' : null } |
   { 'ContractTemplateId' : null } |
@@ -172,6 +174,7 @@ export type DeployContractError = {
     'GetIcpXdrConversionRateError' : { 'reason' : string }
   } |
   { 'InsufficientApprovedAccountAllowance' : null } |
+  { 'ContractTemplateRetired' : null } |
   { 'ActiveDeploymentExists' : ProcessDeploymentResult } |
   { 'DeploymentUnavailable' : null } |
   { 'ContractTemplateNotFound' : null } |
@@ -331,9 +334,8 @@ export type FinalizeDeploymentState = { 'Finalized' : null } |
   { 'StartDeploymentFinalization' : null };
 export type GetAccessRightsResponse = { 'Ok' : GetAccessRightsResult };
 export interface GetAccessRightsResult { 'access_rights' : Array<AccessRight> }
-export type GetCanisterMetricsError = { 'PermissionDenied' : null };
 export type GetCanisterMetricsResponse = { 'Ok' : GetCanisterMetricsResult } |
-  { 'Err' : GetCanisterMetricsError };
+  { 'Err' : BlockContractsError };
 export interface GetCanisterMetricsResult { 'metrics' : CanisterMetrics }
 export type GetCanisterStatusError = {
     'ManagementCallError' : { 'reason' : string }
@@ -356,6 +358,14 @@ export type GetContractActivationCodeResponse = {
   } |
   { 'Err' : GetContractActivationCodeError };
 export interface GetContractActivationCodeResult { 'code' : string }
+export interface GetContractBlockStatusArgs { 'filter' : ContractBlockFilter }
+export type GetContractBlockStatusError = { 'DeploymentNotFound' : null } |
+  { 'ContractCanisterNotFound' : null };
+export type GetContractBlockStatusResponse = {
+    'Ok' : GetContractBlockStatusResult
+  } |
+  { 'Err' : GetContractBlockStatusError };
+export interface GetContractBlockStatusResult { 'blocked' : [] | [Timestamped] }
 export interface GetContractTemplateArgs { 'contract_template_id' : bigint }
 export type GetContractTemplateError = { 'ContractTemplateNotFound' : null };
 export type GetContractTemplateResponse = { 'Ok' : GetContractTemplateResult } |
@@ -433,10 +443,17 @@ export interface HubEvent {
   'event' : HubEventType,
   'caller' : Principal,
 }
-export type HubEventType = { 'ConfigSet' : GetConfigResult } |
+export type HubEventType = {
+    'ContractTemplateRetired' : {
+      'contract_template_id' : bigint,
+      'retired' : boolean,
+    }
+  } |
+  { 'ConfigSet' : GetConfigResult } |
   { 'ContractTemplateBlocked' : GetContractTemplateArgs } |
   { 'AccessRightsSet' : GetAccessRightsResult } |
-  { 'ContractTemplateAdded' : GetContractTemplateArgs };
+  { 'ContractTemplateAdded' : GetContractTemplateArgs } |
+  { 'ContractBlocked' : { 'deployment_ids_count' : bigint } };
 export type HubEventsSortingKey = { 'EventId' : null };
 export type IcpConversationRate = {
     'CMC' : { 'xdr_permyriad_per_icp' : bigint, 'timestamp_seconds' : bigint }
@@ -497,6 +514,7 @@ export interface ObtainContractCertificateResult {
 }
 export type Permission = { 'AddContractTemplate' : null } |
   { 'BlockContract' : null } |
+  { 'RetireContractTemplate' : null } |
   { 'BlockContractTemplate' : null } |
   { 'SetAccessRights' : null } |
   { 'SetConfig' : null };
@@ -524,6 +542,16 @@ export type SetConfigError = { 'WrongConfig' : { 'reason' : string } } |
   { 'PermissionDenied' : null };
 export type SetConfigResponse = { 'Ok' : null } |
   { 'Err' : SetConfigError };
+export interface SetContractTemplateRetiredArgs {
+  'contract_template_id' : bigint,
+  'reason' : [] | [string],
+}
+export type SetContractTemplateRetiredError = {
+    'ContractTemplateNotFound' : null
+  } |
+  { 'PermissionDenied' : null };
+export type SetContractTemplateRetiredResponse = { 'Ok' : null } |
+  { 'Err' : SetContractTemplateRetiredError };
 export interface SetUploadWasmGrantArgs { 'grant' : [] | [UploadWasmGrant] }
 export type SetUploadWasmGrantError = { 'PermissionDenied' : null } |
   { 'WasmLengthIsTooBig' : null };
@@ -589,11 +617,11 @@ export interface _SERVICE {
     [AddContractTemplateArgs],
     AddContractTemplateResponse
   >,
-  'block_contracts' : ActorMethod<[BlockContractsArgs], BlockContractsResponse>,
   'block_contract_template' : ActorMethod<
     [BlockContractTemplateArgs],
     BlockContractTemplateResponse
   >,
+  'block_contracts' : ActorMethod<[BlockContractsArgs], BlockContractsResponse>,
   'cancel_deployment' : ActorMethod<
     [CancelDeploymentArgs],
     CancelDeploymentResponse
@@ -603,13 +631,13 @@ export interface _SERVICE {
   'get_canister_metrics' : ActorMethod<[{}], GetCanisterMetricsResponse>,
   'get_canister_status' : ActorMethod<[], GetCanisterStatusResponse>,
   'get_config' : ActorMethod<[{}], GetConfigResponse>,
-  'get_contract_block_status' : ActorMethod<
-    [GetContractBlockStatusArgs],
-    GetContractBlockStatusResult
-  >,
   'get_contract_activation_code' : ActorMethod<
     [GetContractActivationCodeArgs],
     GetContractActivationCodeResponse
+  >,
+  'get_contract_block_status' : ActorMethod<
+    [GetContractBlockStatusArgs],
+    GetContractBlockStatusResponse
   >,
   'get_contract_template' : ActorMethod<
     [GetContractTemplateArgs],
@@ -647,6 +675,10 @@ export interface _SERVICE {
     SetAccessRightsResponse
   >,
   'set_config' : ActorMethod<[SetConfigArgs], SetConfigResponse>,
+  'set_contract_template_retired' : ActorMethod<
+    [SetContractTemplateRetiredArgs],
+    SetContractTemplateRetiredResponse
+  >,
   'set_upload_wasm_grant' : ActorMethod<
     [SetUploadWasmGrantArgs],
     SetUploadWasmGrantResponse
