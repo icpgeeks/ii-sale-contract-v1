@@ -1,8 +1,10 @@
+import type {Principal} from '@dfinity/principal';
 import {fromNullable, isNullish, nonNullish} from '@dfinity/utils';
 import {Flex} from 'antd';
 import {ErrorAlert} from 'frontend/src/components/widgets/alert/ErrorAlert';
 import {ExternalLinkToFAQAsQuestionMark} from 'frontend/src/components/widgets/ExternalLinkToFAQAsQuestionMark';
 import {useContractCertificateContext} from 'frontend/src/context/certificate/ContractCertificateProvider';
+import {HubContractBlockStatusProvider, useHubContractBlockStatusContext} from 'frontend/src/context/hub/HubContractBlockStatusProvider';
 import {HubContractTemplateProvider, useHubContractTemplateContext} from 'frontend/src/context/hub/HubContractTemplateProvider';
 import {i18} from 'frontend/src/i18';
 import {useMemo} from 'react';
@@ -10,34 +12,35 @@ import {useMemo} from 'react';
 export const ContractBlockedBanner = () => {
     const {contractCertificate} = useContractCertificateContext();
 
-    const [hubCanisterId, contractTemplateId] = useMemo<[string | undefined, bigint | undefined]>(() => {
+    const [hubCanisterId, contractTemplateId, contractCanisterId] = useMemo<[string | undefined, bigint | undefined, Principal | undefined]>(() => {
         if (isNullish(contractCertificate)) {
-            return [undefined, undefined];
+            return [undefined, undefined, undefined];
         }
-        return [contractCertificate.hub_canister.toText(), contractCertificate.contract_template_id];
+        return [contractCertificate.hub_canister.toText(), contractCertificate.contract_template_id, contractCertificate.contract_canister];
     }, [contractCertificate]);
 
-    if (isNullish(hubCanisterId) || isNullish(contractTemplateId)) {
+    if (isNullish(hubCanisterId) || isNullish(contractTemplateId) || isNullish(contractCanisterId)) {
         return null;
     }
 
     return (
-        <HubContractTemplateProvider hubCanisterId={hubCanisterId} contractTemplateId={contractTemplateId}>
-            <Content />
+        <HubContractTemplateProvider key={`${hubCanisterId}:${contractTemplateId}:${contractCanisterId.toText()}`} hubCanisterId={hubCanisterId} contractTemplateId={contractTemplateId}>
+            <HubContractBlockStatusProvider hubCanisterId={hubCanisterId} contractCanisterId={contractCanisterId}>
+                <Content />
+            </HubContractBlockStatusProvider>
         </HubContractTemplateProvider>
     );
 };
 
 const Content = () => {
-    const {data: hubContractTemplate} = useHubContractTemplateContext();
+    const {hubContractTemplate} = useHubContractTemplateContext();
+    const {hubContractBlockStatus} = useHubContractBlockStatusContext();
 
     const isBlocked = useMemo(() => {
-        if (isNullish(hubContractTemplate)) {
-            return false;
-        }
-        const blocked = fromNullable(hubContractTemplate.contract_template.blocked);
-        return nonNullish(blocked);
-    }, [hubContractTemplate]);
+        const templateBlocked = nonNullish(hubContractTemplate.data) && nonNullish(fromNullable(hubContractTemplate.data.contract_template.blocked));
+        const contractBlocked = nonNullish(hubContractBlockStatus.data) && nonNullish(fromNullable(hubContractBlockStatus.data.blocked));
+        return templateBlocked || contractBlocked;
+    }, [hubContractTemplate.data, hubContractBlockStatus.data]);
 
     if (!isBlocked) {
         return null;

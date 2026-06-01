@@ -285,6 +285,7 @@ pub(crate) fn handle_capture_event(
             authn_pubkeys,
             active_registration,
             openid_credentials,
+            email_recovery_addresses,
         } => {
             state_matches!(
                 model,
@@ -300,6 +301,7 @@ pub(crate) fn handle_capture_event(
                     authn_pubkeys: authn_pubkeys.clone(),
                     active_registration: *active_registration,
                     openid_credentials: openid_credentials.clone(),
+                    email_recovery_addresses: email_recovery_addresses.clone(),
                 },
             );
             Ok(())
@@ -372,6 +374,24 @@ pub(crate) fn handle_capture_event(
                     if let Some(keys) = openid_credentials {
                         keys.retain(|key| key != openid_credential_key);
                     }
+                }
+                _ => {
+                    return Err(UpdateHolderError::WrongState);
+                }
+            }
+            Ok(())
+        }
+        CaptureProcessingEvent::IdentityEmailRecoveryDeleted { address } => {
+            match &mut model.state.value {
+                HolderState::Capture {
+                    sub_state:
+                        CaptureState::DeletingIdentityAuthnMethods {
+                            email_recovery_addresses,
+                            ..
+                        },
+                    ..
+                } => {
+                    email_recovery_addresses.retain(|stored_address| stored_address != address);
                 }
                 _ => {
                     return Err(UpdateHolderError::WrongState);

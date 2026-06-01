@@ -57,6 +57,7 @@ pub enum CaptureState {
         authn_pubkeys: Vec<PublicKey>,
         active_registration: bool,
         openid_credentials: Option<Vec<OpenIdCredentialKey>>,
+        email_recovery_addresses: Vec<String>,
     },
     FinishCapture,
     CaptureFailed {
@@ -345,6 +346,7 @@ pub enum CaptureProcessingEvent {
         authn_pubkeys: Vec<PublicKey>,
         active_registration: bool,
         openid_credentials: Option<Vec<OpenIdCredentialKey>>,
+        email_recovery_addresses: Vec<String>,
     },
     IdentityAuthnMethodDeleted {
         public_key: Vec<u8>,
@@ -352,6 +354,9 @@ pub enum CaptureProcessingEvent {
     IdentityAuthnMethodRegistrationExited,
     IdentityOpenidCredentialDeleted {
         openid_credential_key: OpenIdCredentialKey,
+    },
+    IdentityEmailRecoveryDeleted {
+        address: String,
     },
     ProtectedIdentityAuthnMethodDeleted,
     IdentityAuthnMethodsResync,

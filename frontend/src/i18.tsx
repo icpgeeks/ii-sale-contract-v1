@@ -66,7 +66,7 @@ const rawI18 = {
     toolbar: {
         title: {
             first: 'INTERNET IDENTITY',
-            second: 'SALE CONTRACT v1.2'
+            second: 'SALE CONTRACT v1.3'
         },
         menu: {
             home: 'Home',
@@ -102,7 +102,7 @@ const rawI18 = {
             description: 'To avoid phishing attempts, always validate the contract URL on the GeekFactory Hub before connecting.'
         },
         contractBlocked: {
-            title: 'CONTRACT TEMPLATE IS BLOCKED',
+            title: 'CONTRACT IS BLOCKED',
             description: 'This contract can no longer be trusted for secure operations.'
         }
     },

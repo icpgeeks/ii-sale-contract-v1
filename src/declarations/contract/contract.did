@@ -149,6 +149,7 @@ type CaptureProcessingEvent = variant {
     public_key : blob;
     meta_data : vec record { text; text };
   };
+  IdentityEmailRecoveryDeleted : record { address : text };
   IdentityOpenidCredentialDeleted : record {
     openid_credential_key : record { text; text; text };
   };
@@ -168,6 +169,7 @@ type CaptureProcessingEvent = variant {
   CancelCapture;
   IdentityAuthnMethodsObtained : record {
     authn_pubkeys : vec blob;
+    email_recovery_addresses : vec text;
     active_registration : bool;
     openid_credentials : opt vec record { text; text; text };
   };
@@ -198,6 +200,7 @@ type CaptureState = variant {
   ExitAndRegisterHolderAuthnMethod : ConfirmHolderAuthnMethodRegistrationArgs;
   DeletingIdentityAuthnMethods : record {
     authn_pubkeys : vec blob;
+    email_recovery_addresses : vec text;
     active_registration : bool;
     openid_credentials : opt vec record { text; text; text };
   };

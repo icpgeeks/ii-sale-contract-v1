@@ -227,6 +227,7 @@ export const idlFactory = ({ IDL }) => {
     'ExitAndRegisterHolderAuthnMethod' : ConfirmHolderAuthnMethodRegistrationArgs,
     'DeletingIdentityAuthnMethods' : IDL.Record({
       'authn_pubkeys' : IDL.Vec(IDL.Vec(IDL.Nat8)),
+      'email_recovery_addresses' : IDL.Vec(IDL.Text),
       'active_registration' : IDL.Bool,
       'openid_credentials' : IDL.Opt(
         IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text, IDL.Text))
@@ -638,6 +639,7 @@ export const idlFactory = ({ IDL }) => {
       'public_key' : IDL.Vec(IDL.Nat8),
       'meta_data' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text)),
     }),
+    'IdentityEmailRecoveryDeleted' : IDL.Record({ 'address' : IDL.Text }),
     'IdentityOpenidCredentialDeleted' : IDL.Record({
       'openid_credential_key' : IDL.Tuple(IDL.Text, IDL.Text, IDL.Text),
     }),
@@ -659,6 +661,7 @@ export const idlFactory = ({ IDL }) => {
     'CancelCapture' : IDL.Null,
     'IdentityAuthnMethodsObtained' : IDL.Record({
       'authn_pubkeys' : IDL.Vec(IDL.Vec(IDL.Nat8)),
+      'email_recovery_addresses' : IDL.Vec(IDL.Text),
       'active_registration' : IDL.Bool,
       'openid_credentials' : IDL.Opt(
         IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text, IDL.Text))

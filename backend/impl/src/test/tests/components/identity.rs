@@ -8,10 +8,11 @@ use common_canister_impl::{
             AccountInfo, AccountNumber, AuthnMethod, AuthnMethodConfirmRet,
             AuthnMethodConfirmationCode, AuthnMethodData, AuthnMethodRegisterError,
             AuthnMethodRegisterRet, AuthnMethodRegistrationModeEnterRet,
-            AuthnMethodRegistrationModeExitRet, AuthnMethodRemoveRet, GetAccountDelegationRet,
-            GetAccountsError, GetDefaultAccountRet, GetDelegationResponse, IdentityAuthnInfo,
-            IdentityAuthnInfoRet, IdentityInfoRet, OpenidCredentialRemoveRet,
-            PrepareAccountDelegationRet, PublicKey, RegistrationId, UserNumber, WebAuthn,
+            AuthnMethodRegistrationModeExitRet, AuthnMethodRemoveRet,
+            EmailRecoveryCredentialRemoveRet, GetAccountDelegationRet, GetAccountsError,
+            GetDefaultAccountRet, GetDelegationResponse, IdentityAuthnInfo, IdentityAuthnInfoRet,
+            IdentityInfoRet, OpenidCredentialRemoveRet, PrepareAccountDelegationRet, PublicKey,
+            RegistrationId, UserNumber, WebAuthn,
         },
         interface::Identity,
         interface_impl::IdentityImpl,
@@ -172,6 +173,23 @@ impl Identity for IdentityTest {
     ) -> Result<OpenidCredentialRemoveRet, String> {
         self.proxy
             .decode_openid_credential_remove_response(response_data)
+    }
+
+    fn build_email_recovery_credential_remove_request(
+        &self,
+        identity_number: &IdentityNumber,
+        address: &String,
+    ) -> IcAgentRequestDefinition {
+        self.proxy
+            .build_email_recovery_credential_remove_request(identity_number, address)
+    }
+
+    fn decode_email_recovery_credential_remove_response(
+        &self,
+        response_data: &[u8],
+    ) -> Result<EmailRecoveryCredentialRemoveRet, String> {
+        self.proxy
+            .decode_email_recovery_credential_remove_response(response_data)
     }
 
     fn build_get_principal_request(

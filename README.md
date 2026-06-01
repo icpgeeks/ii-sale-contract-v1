@@ -1,8 +1,12 @@
-# Internet Identity Sale Contract v1.2
+# Internet Identity Sale Contract v1.3
 
 This single-use smart contract enables trustless sale of an entire Internet Identity along with all linked assets, accounts, permissions, and dapp accesses. It provides key functionality like listing, offers, validation, ownership transfer, and payments. The contract is issued with a cryptographic certificate, which makes it fully immutable for the entire certification period.
 
 ## What's New
+
+### Version 1.3
+
+- Added support for Internet Identities with email recovery.
 
 ### Version 1.2
 

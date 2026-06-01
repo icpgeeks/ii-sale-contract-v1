@@ -1,7 +1,7 @@
 import type {Principal} from '@dfinity/principal';
 import type {CanisterOptions, QueryParams} from '@dfinity/utils';
 import {Canister, createServices} from '@dfinity/utils';
-import {idlFactory, type _SERVICE} from 'src/declarations/hub/hub.did.js';
+import {idlFactory, type _SERVICE, type GetContractBlockStatusArgs} from 'src/declarations/hub/hub.did.js';
 
 type HubService = _SERVICE;
 
@@ -11,6 +11,7 @@ interface HubCanisterOptions<T> extends Omit<CanisterOptions<T>, 'canisterId'> {
 
 type GetContractTemplateArgs = {contractTemplateId: bigint};
 type GetContractTemplateParams = GetContractTemplateArgs & QueryParams;
+type GetContractBlockStatusParams = GetContractBlockStatusArgs & QueryParams;
 
 export class HubAnonymousCanister extends Canister<HubService> {
     static create(options: HubCanisterOptions<HubService>) {
@@ -29,5 +30,9 @@ export class HubAnonymousCanister extends Canister<HubService> {
 
     getContractTemplate = async (params: GetContractTemplateParams) => {
         return await this.caller(params).get_contract_template({contract_template_id: params.contractTemplateId});
+    };
+
+    getContractBlockStatus = async (params: GetContractBlockStatusParams) => {
+        return await this.caller(params).get_contract_block_status(params);
     };
 }

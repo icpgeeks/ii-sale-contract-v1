@@ -1,6 +1,6 @@
 use common_canister_impl::components::identity::api::{
-    AuthnMethodRegistrationModeExitRet, AuthnMethodRemoveRet, OpenIdCredentialRemoveError,
-    OpenidCredentialRemoveRet, PublicKey,
+    AuthnMethodRegistrationModeExitRet, AuthnMethodRemoveRet, EmailRecoveryError,
+    OpenIdCredentialRemoveError, OpenidCredentialRemoveRet, PublicKey,
 };
 use common_canister_impl::handlers::build_ic_agent_request;
 use common_canister_types::components::identity::OpenIdCredentialKey;
@@ -25,38 +25,47 @@ pub(crate) async fn process(
 ) -> Result<ProcessingResult, HolderProcessingError> {
     log_info!(env, "Identity authn methods: deleting ...");
 
-    let (mut pubkey_supplier, openid_credential_supplier, active_registration) =
-        get_holder_model(|_, model| match &model.state.value {
-            HolderState::Capture {
-                sub_state:
-                    CaptureState::DeletingIdentityAuthnMethods {
-                        authn_pubkeys,
-                        active_registration,
-                        openid_credentials,
-                    },
-                ..
-            } => {
-                let mut authn_pubkeys = authn_pubkeys.clone();
-                let openid_credentials = openid_credentials.clone();
-                Ok((
-                    move || authn_pubkeys.pop(),
-                    move || openid_credentials.and_then(|mut creds| creds.pop()),
-                    *active_registration,
-                ))
-            }
-            _ => Err(HolderProcessingError::InternalError {
-                error: "Invalid holder state for deleting identity authn methods".to_owned(),
-            }),
-        })?;
+    let (
+        mut pubkey_supplier,
+        openid_credential_supplier,
+        email_recovery_supplier,
+        active_registration,
+    ) = get_holder_model(|_, model| match &model.state.value {
+        HolderState::Capture {
+            sub_state:
+                CaptureState::DeletingIdentityAuthnMethods {
+                    authn_pubkeys,
+                    active_registration,
+                    openid_credentials,
+                    email_recovery_addresses,
+                },
+            ..
+        } => {
+            let mut authn_pubkeys = authn_pubkeys.clone();
+            let openid_credentials = openid_credentials.clone();
+            let email_recovery_addresses = email_recovery_addresses.clone();
+            Ok((
+                move || authn_pubkeys.pop(),
+                move || openid_credentials.and_then(|mut creds| creds.pop()),
+                move || email_recovery_addresses.last().cloned(),
+                *active_registration,
+            ))
+        }
+        _ => Err(HolderProcessingError::InternalError {
+            error: "Invalid holder state for deleting identity authn methods".to_owned(),
+        }),
+    })?;
 
     if let Some(pubkey) = pubkey_supplier() {
         delete_identity_authn_method(env, lock, &ByteBuf::from(pubkey)).await?;
     } else if let Some(credential) = openid_credential_supplier() {
         delete_openid_credential(env, lock, &credential).await?;
+    } else if let Some(address) = email_recovery_supplier() {
+        delete_email_recovery(env, lock, &address).await?;
     } else if active_registration {
         exit_authn_method_registration(env, lock).await?;
     } else {
-        // ALL AUTHN METHODS and OPENID CREDENTIALS and METHOD REGISTRATION DELETED in this chunk, we should reevaluate state of identity by obtaining full identity info again
+        // ALL AUTHN METHODS and OPENID CREDENTIALS and EMAIL RECOVERY and METHOD REGISTRATION DELETED in this chunk, we should reevaluate state of identity by obtaining full identity info again
         log_info!(env, "Identity authn methods: partially deleted");
 
         update_holder(
@@ -253,6 +262,69 @@ async fn delete_openid_credential(
                 identity_authn_methods_resync(lock)
             }
             OpenIdCredentialRemoveError::Unauthorized(..) => identity_authn_methods_resync(lock),
+        },
+    }
+}
+
+async fn delete_email_recovery(
+    env: &Environment,
+    lock: &HolderLock,
+    address: &String,
+) -> Result<ProcessingResult, HolderProcessingError> {
+    log_info!(env, "Delete identity email recovery: {address:?} ...");
+
+    let (request_definition, sender) = get_holder_model(|_, model| {
+        (
+            env.get_identity()
+                .build_email_recovery_credential_remove_request(
+                    &model.identity_number.unwrap(),
+                    address,
+                ),
+            model.get_request_sender(),
+        )
+    });
+
+    let ic_agent_request = build_ic_agent_request(env, request_definition, sender)
+        .await
+        .map_err(to_internal_error)?;
+
+    let response_data = match execute_ic_agent_request(env, ic_agent_request).await {
+        Ok(data) => data,
+        Err(err) => {
+            log_error!(
+                env,
+                "Delete identity email recovery: ic agent error {err:?}"
+            );
+            return identity_authn_methods_resync(lock);
+        }
+    };
+
+    let response = env
+        .get_identity()
+        .decode_email_recovery_credential_remove_response(&response_data)
+        .map_err(to_internal_error)?;
+
+    match response {
+        Ok(()) => {
+            log_info!(env, "Delete identity email recovery: {address:?} deleted.");
+            update_holder(
+                lock,
+                HolderProcessingEvent::Capturing {
+                    event: CaptureProcessingEvent::IdentityEmailRecoveryDeleted {
+                        address: address.clone(),
+                    },
+                },
+            )
+            .map(|_| ProcessingResult::Continue)
+        }
+        Err(error) => match error {
+            EmailRecoveryError::InternalCanisterError(reason) => Err(to_ic_agent_error(reason)),
+            EmailRecoveryError::AddressNotRegistered | EmailRecoveryError::Unauthorized(..) => {
+                identity_authn_methods_resync(lock)
+            }
+            other => Err(HolderProcessingError::InternalError {
+                error: format!("Unexpected email recovery remove error: {other:?}"),
+            }),
         },
     }
 }
