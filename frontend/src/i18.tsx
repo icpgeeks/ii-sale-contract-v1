@@ -272,7 +272,7 @@ FEATURES
 
 - Operates as isolated canister with no shared state and no external controllers once deployed.
 - Receives 100-day certificate providing full immutability while valid.
-- Takes temporary exclusive custody and control of Internet Identity by removing all other passkeys, including seed phrase.
+- Takes temporary exclusive custody and control of Internet Identity by removing all other passkeys, including seed phrase and recovery email.
 - Removes all neuron hotkeys to eliminate residual control by seller.
 - Supports Internet Identities with multiple accounts.
 - Detects and displays ICP accounts and neurons from NNS Dapp.

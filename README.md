@@ -33,7 +33,7 @@ This single-use smart contract enables trustless sale of an entire Internet Iden
 
 - Operates as isolated canister with no shared state and no external controllers once deployed.
 - Receives 100-day certificate providing full immutability while valid.
-- Takes temporary exclusive custody and control of Internet Identity by removing all other passkeys, including seed phrase.
+- Takes temporary exclusive custody and control of Internet Identity by removing all other passkeys, including seed phrase and recovery email.
 - Removes all neuron hotkeys to eliminate residual control by seller.
 - Detects and displays ICP accounts and neurons from NNS Dapp.
 - Supports Internet Identities with multiple accounts.
