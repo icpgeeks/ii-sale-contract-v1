@@ -422,7 +422,9 @@ pub(crate) fn handle_fetch_assets_event(
         }
 
         FetchAssetsEvent::NeuronHotkeyDeleted {
-            neuron_id, hot_key, ..
+            neuron_id,
+            hot_key,
+            failed,
         } => {
             let neuron_hotkeys = match &mut model.state.value {
                 HolderState::Holding {
@@ -447,12 +449,14 @@ pub(crate) fn handle_fetch_assets_event(
                 }
             };
 
-            neuron_hotkeys.retain_mut(|entry| {
-                if &entry.0 == neuron_id {
-                    entry.1.retain(|hk| hk != hot_key);
-                }
-                !entry.1.is_empty()
-            });
+            if failed.is_none() {
+                neuron_hotkeys.retain_mut(|entry| {
+                    if &entry.0 == neuron_id {
+                        entry.1.retain(|hk| hk != hot_key);
+                    }
+                    !entry.1.is_empty()
+                });
+            }
             Ok(())
         }
 
