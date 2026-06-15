@@ -19,7 +19,16 @@ import type {
 
 // ─── Inner level (NNS sub-steps for one identity account slot) ───────────────
 
-type NnsAssetsStepType = 'obtainDelegation' | 'neuronIds' | 'neurons' | 'deletingNeuronHotkeys' | 'accounts' | 'accountBalances' | 'finishCurrentNnsAccountFetch' | 'n/a';
+type NnsAssetsStepType =
+    | 'obtainDelegation'
+    | 'neuronIds'
+    | 'neurons'
+    | 'deletingNeuronHotkeys'
+    | 'verifyingNeuronHotkeyDeletion'
+    | 'accounts'
+    | 'accountBalances'
+    | 'finishCurrentNnsAccountFetch'
+    | 'n/a';
 
 type NnsAssetsStepProto<T extends NnsAssetsStepType> = {
     type: T;
@@ -29,7 +38,7 @@ type NnsAssetsStepNeurons = NnsAssetsStepProto<'neurons'> & {
     neuronsLeft: number;
 };
 
-type NnsAssetsStepDeletingNeuronHotkeys = NnsAssetsStepProto<'deletingNeuronHotkeys'> & {
+type NnsAssetsStepNeuronHotkeys = NnsAssetsStepProto<'deletingNeuronHotkeys' | 'verifyingNeuronHotkeyDeletion'> & {
     hotkeysLeft: number;
 };
 
@@ -41,7 +50,7 @@ export type NnsAssetsStep =
     | NnsAssetsStepProto<'obtainDelegation'>
     | NnsAssetsStepProto<'neuronIds'>
     | NnsAssetsStepNeurons
-    | NnsAssetsStepDeletingNeuronHotkeys
+    | NnsAssetsStepNeuronHotkeys
     | NnsAssetsStepProto<'accounts'>
     | NnsAssetsStepAccountBalances
     | NnsAssetsStepProto<'finishCurrentNnsAccountFetch'>
@@ -276,8 +285,10 @@ const getStepFromNNS = (state: FetchNnsAssetsState, fetchingAssets: HolderAssets
             return getHoldingStepNeurons(fetchingAssets, slotIndex);
         }
         case 'DeletingNeuronsHotkeys': {
-            const hotkeysLeft = union.state.neuron_hotkeys.map((v) => v[1].length).reduce((v, acc) => v + acc, 0);
-            return {type: 'deletingNeuronHotkeys', hotkeysLeft};
+            return {type: 'deletingNeuronHotkeys', hotkeysLeft: countNeuronHotkeysLeft(union.state.neuron_hotkeys)};
+        }
+        case 'VerifyingNeuronHotkeyDeletion': {
+            return {type: 'verifyingNeuronHotkeyDeletion', hotkeysLeft: countNeuronHotkeysLeft(union.state.neuron_hotkeys)};
         }
         case 'GetAccountsInformation': {
             return {type: 'accounts'};
@@ -291,6 +302,10 @@ const getStepFromNNS = (state: FetchNnsAssetsState, fetchingAssets: HolderAssets
             return defaultResult;
         }
     }
+};
+
+const countNeuronHotkeysLeft = (neuronHotkeys: Array<[bigint, Array<unknown>]>): number => {
+    return neuronHotkeys.map((v) => v[1].length).reduce((v, acc) => v + acc, 0);
 };
 
 const getHoldingStepNeurons = (fetchingAssets: HolderAssets | undefined, slotIndex: number): NnsAssetsStepNeurons => {

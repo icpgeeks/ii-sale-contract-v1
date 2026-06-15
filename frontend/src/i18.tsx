@@ -818,6 +818,10 @@ This description does not cover all possible risks, limitations, or edge cases. 
                         simple: 'Removing hotkeys',
                         detailed: (hotkeysLeft: number) => `(${hotkeysLeft} ${hotkeysLeft == 1 ? 'hotkey' : 'hotkeys'} left)`
                     },
+                    verifyingHotkeyRemoval: {
+                        simple: 'Verifying hotkey removal',
+                        detailed: (hotkeysLeft: number) => `(${hotkeysLeft} ${hotkeysLeft == 1 ? 'hotkey' : 'hotkeys'} left)`
+                    },
                     fetchingAccounts: {
                         simple: 'Fetching accounts',
                         detailed: (accountsLeft: number) => `(${accountsLeft} ${accountsLeft == 1 ? 'account' : 'accounts'} left)`
