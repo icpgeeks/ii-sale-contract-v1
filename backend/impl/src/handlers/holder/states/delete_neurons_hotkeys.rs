@@ -95,24 +95,16 @@ pub(crate) async fn process(
                         hot_key.to_text()
                     );
 
-                    FetchAssetsEvent::NeuronHotkeyDeleted {
-                        neuron_id,
-                        hot_key,
-                        failed: None,
-                    }
+                    FetchAssetsEvent::NeuronHotkeyDeleted { neuron_id, hot_key }
                 }
                 other => {
                     log_error!(
                         env,
-                        "Neuron {neuron_id}: failed to delete hot key '{}', reason: {other:?}",
+                        "Neuron {neuron_id}: ambiguous RemoveHotKey response for '{}': {other:?}; verifying on-chain state.",
                         hot_key.to_text()
                     );
 
-                    FetchAssetsEvent::NeuronHotkeyDeleted {
-                        neuron_id,
-                        hot_key,
-                        failed: Some(format!("{other:?}")),
-                    }
+                    FetchAssetsEvent::NeuronHotkeyDeletionVerifyStarted { neuron_id, hot_key }
                 }
             };
 

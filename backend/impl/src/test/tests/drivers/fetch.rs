@@ -210,8 +210,8 @@ pub(crate) fn send_delegation_got(delegation_key: Vec<u8>) {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/// Returns true when the state machine is currently in `DeletingNeuronsHotkeys`.
-fn is_in_deleting_neurons_hotkeys() -> bool {
+/// Returns true while hotkey deletion or post-failure verification is in progress.
+fn is_in_neuron_hotkey_deletion_flow() -> bool {
     get_holder_model(|_, model| {
         matches!(
             &model.state.value,
@@ -219,7 +219,8 @@ fn is_in_deleting_neurons_hotkeys() -> bool {
                 sub_state: HoldingState::FetchAssets {
                     fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
                         sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
-                            sub_state: FetchNnsAssetsState::DeletingNeuronsHotkeys { .. },
+                            sub_state: FetchNnsAssetsState::DeletingNeuronsHotkeys { .. }
+                                | FetchNnsAssetsState::VerifyingNeuronHotkeyDeletion { .. },
                             ..
                         },
                     },
@@ -320,8 +321,8 @@ async fn drive_nns_account(config: &AccountFetchConfig) {
         // into DeletingNeuronsHotkeys.
         super::super::tick().await;
 
-        // Drain DeletingNeuronsHotkeys — one tick per hotkey batch until gone.
-        while is_in_deleting_neurons_hotkeys() {
+        // Drain hotkey deletion / verification until the queue is empty.
+        while is_in_neuron_hotkey_deletion_flow() {
             super::super::tick().await;
         }
         // State: GetAccountsInformation

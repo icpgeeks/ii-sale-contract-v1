@@ -20,7 +20,7 @@ use crate::handlers::holder::states::{
     sleep_processing, start_accept_sale_deal, start_check_assets, start_fetch_assets,
     start_holding, transfer_developer_reward, transfer_hub_reward, transfer_referral_reward,
     transfer_sale_deal_amount_to_seller_account, transfer_sale_deal_amount_to_transit_account,
-    update_holder, validate_assets,
+    update_holder, validate_assets, verify_neuron_hotkey_deletion,
 };
 use crate::model::holder::HolderLock;
 use crate::{log_info, processor_toolkit, read_state};
@@ -211,6 +211,9 @@ fn get_holding_processor<'a>(holding_state: HoldingState) -> Option<Processor<'a
                         }
                         FetchNnsAssetsState::DeletingNeuronsHotkeys { .. } => {
                             Some(processor_toolkit!(delete_neurons_hotkeys))
+                        }
+                        FetchNnsAssetsState::VerifyingNeuronHotkeyDeletion { .. } => {
+                            Some(processor_toolkit!(verify_neuron_hotkey_deletion))
                         }
                         FetchNnsAssetsState::GetAccountsInformation => {
                             Some(processor_toolkit!(get_accounts_information))

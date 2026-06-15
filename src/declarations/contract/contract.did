@@ -233,9 +233,9 @@ type CheckApprovedBalanceError = variant {
   AllowanceExpiresTooEarly;
 };
 type CheckAssetsEvent = variant {
-  CheckAccountsAdvance : record { principal : principal; sub_account : blob };
+  CheckAccountsAdvance : record { "principal" : principal; sub_account : blob };
   CheckAssetsFinished;
-  AccountHasApprove : record { principal : principal; sub_account : blob };
+  AccountHasApprove : record { "principal" : principal; sub_account : blob };
   CheckAssetsStarted;
   CheckAccountsPrepared : record {
     sub_accounts : vec record { principal; blob };
@@ -316,18 +316,26 @@ type FetchAssetsEvent = variant {
     ctrl_neurons : vec record { NeuronAsset; vec principal };
   };
   NeuronsInformationObtained;
+  NeuronHotkeyVerifiedPresent : record {
+    hot_key : principal;
+    neuron_id : nat64;
+  };
   NeuronsInformationGotEmpty : record { neuron_ids : vec nat64 };
+  NeuronHotkeyDeletionVerifyStarted : record {
+    hot_key : principal;
+    neuron_id : nat64;
+  };
   IdentityAccountsGot : record {
     hostname : text;
     accounts : vec record { opt nat64; opt text };
   };
   NeuronsIdsGot : record { neuron_ids : vec nat64 };
-  AccountsBalancesObtained;
-  NeuronHotkeyDeleted : record {
+  NeuronHotkeyVerifiedAbsent : record {
     hot_key : principal;
-    failed : opt text;
     neuron_id : nat64;
   };
+  AccountsBalancesObtained;
+  NeuronHotkeyDeleted : record { hot_key : principal; neuron_id : nat64 };
   NnsAssetsForAccountFetched : record { identity_account_number : opt nat64 };
   TooManyNeurons;
   ObtainDelegation : record { event : ObtainDelegationEvent };
@@ -372,6 +380,11 @@ type FetchNnsAssetsState = variant {
   };
   GetAccountsInformation;
   GetAccountsBalances;
+  VerifyingNeuronHotkeyDeletion : record {
+    neuron_hotkeys : vec record { nat64; vec principal };
+    hot_key : principal;
+    neuron_id : nat64;
+  };
 };
 type GeHolderEventsResponse = variant { Ok : GetHolderEventsResult };
 type GetCanisterMetricsError = variant { PermissionDenied };
@@ -821,7 +834,7 @@ type UnsellableReason = variant {
   ValidationFailed : record { reason : text };
   CertificateExpired;
   CheckLimitFailed : record { reason : LimitFailureReason };
-  ApproveOnAccount : record { principal : principal; sub_account : blob };
+  ApproveOnAccount : record { "principal" : principal; sub_account : blob };
   SaleDealCompleted;
 };
 service : (InitContractArgs) -> {

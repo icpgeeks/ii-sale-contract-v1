@@ -193,7 +193,10 @@ export const idlFactory = ({ IDL }) => {
     'ValidationFailed' : IDL.Record({ 'reason' : IDL.Text }),
     'CertificateExpired' : IDL.Null,
     'CheckLimitFailed' : IDL.Record({ 'reason' : LimitFailureReason }),
-    'ApproveOnAccount' : IDL.Record({ 'principal' : IDL.Principal, 'sub_account' : IDL.Vec(IDL.Nat8) }),
+    'ApproveOnAccount' : IDL.Record({
+      'principal' : IDL.Principal,
+      'sub_account' : IDL.Vec(IDL.Nat8),
+    }),
     'SaleDealCompleted' : IDL.Null,
   });
   const ReleaseInitiation = IDL.Variant({
@@ -317,6 +320,13 @@ export const idlFactory = ({ IDL }) => {
       }),
       'GetAccountsInformation' : IDL.Null,
       'GetAccountsBalances' : IDL.Null,
+      'VerifyingNeuronHotkeyDeletion' : IDL.Record({
+        'neuron_hotkeys' : IDL.Vec(
+          IDL.Tuple(IDL.Nat64, IDL.Vec(IDL.Principal))
+        ),
+        'hot_key' : IDL.Principal,
+        'neuron_id' : IDL.Nat64,
+      }),
     })
   );
   const FetchIdentityAccountsNnsAssetsState = IDL.Variant({
@@ -711,9 +721,15 @@ export const idlFactory = ({ IDL }) => {
     'HolderAuthnMethodDeleted' : IDL.Null,
   });
   const CheckAssetsEvent = IDL.Variant({
-    'CheckAccountsAdvance' : IDL.Record({ 'principal' : IDL.Principal, 'sub_account' : IDL.Vec(IDL.Nat8) }),
+    'CheckAccountsAdvance' : IDL.Record({
+      'principal' : IDL.Principal,
+      'sub_account' : IDL.Vec(IDL.Nat8),
+    }),
     'CheckAssetsFinished' : IDL.Null,
-    'AccountHasApprove' : IDL.Record({ 'principal' : IDL.Principal, 'sub_account' : IDL.Vec(IDL.Nat8) }),
+    'AccountHasApprove' : IDL.Record({
+      'principal' : IDL.Principal,
+      'sub_account' : IDL.Vec(IDL.Nat8),
+    }),
     'CheckAssetsStarted' : IDL.Null,
     'CheckAccountsPrepared' : IDL.Record({
       'sub_accounts' : IDL.Vec(IDL.Tuple(IDL.Principal, IDL.Vec(IDL.Nat8))),
@@ -734,18 +750,29 @@ export const idlFactory = ({ IDL }) => {
       'ctrl_neurons' : IDL.Vec(IDL.Tuple(NeuronAsset, IDL.Vec(IDL.Principal))),
     }),
     'NeuronsInformationObtained' : IDL.Null,
+    'NeuronHotkeyVerifiedPresent' : IDL.Record({
+      'hot_key' : IDL.Principal,
+      'neuron_id' : IDL.Nat64,
+    }),
     'NeuronsInformationGotEmpty' : IDL.Record({
       'neuron_ids' : IDL.Vec(IDL.Nat64),
+    }),
+    'NeuronHotkeyDeletionVerifyStarted' : IDL.Record({
+      'hot_key' : IDL.Principal,
+      'neuron_id' : IDL.Nat64,
     }),
     'IdentityAccountsGot' : IDL.Record({
       'hostname' : IDL.Text,
       'accounts' : IDL.Vec(IDL.Tuple(IDL.Opt(IDL.Nat64), IDL.Opt(IDL.Text))),
     }),
     'NeuronsIdsGot' : IDL.Record({ 'neuron_ids' : IDL.Vec(IDL.Nat64) }),
+    'NeuronHotkeyVerifiedAbsent' : IDL.Record({
+      'hot_key' : IDL.Principal,
+      'neuron_id' : IDL.Nat64,
+    }),
     'AccountsBalancesObtained' : IDL.Null,
     'NeuronHotkeyDeleted' : IDL.Record({
       'hot_key' : IDL.Principal,
-      'failed' : IDL.Opt(IDL.Text),
       'neuron_id' : IDL.Nat64,
     }),
     'NnsAssetsForAccountFetched' : IDL.Record({

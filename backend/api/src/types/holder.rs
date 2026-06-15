@@ -168,6 +168,11 @@ pub enum FetchNnsAssetsState {
     DeletingNeuronsHotkeys {
         neuron_hotkeys: Vec<(NeuronId, Vec<Principal>)>,
     },
+    VerifyingNeuronHotkeyDeletion {
+        neuron_hotkeys: Vec<(NeuronId, Vec<Principal>)>,
+        neuron_id: NeuronId,
+        hot_key: Principal,
+    },
     GetAccountsInformation,
     GetAccountsBalances,
 }
@@ -425,7 +430,18 @@ pub enum FetchAssetsEvent {
     NeuronHotkeyDeleted {
         neuron_id: NeuronId,
         hot_key: Principal,
-        failed: Option<String>,
+    },
+    NeuronHotkeyDeletionVerifyStarted {
+        neuron_id: NeuronId,
+        hot_key: Principal,
+    },
+    NeuronHotkeyVerifiedAbsent {
+        neuron_id: NeuronId,
+        hot_key: Principal,
+    },
+    NeuronHotkeyVerifiedPresent {
+        neuron_id: NeuronId,
+        hot_key: Principal,
     },
     AllNeuronsHotkeysDeleted,
     AccountsInformationGot {
