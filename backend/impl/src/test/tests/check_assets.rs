@@ -51,6 +51,22 @@ fn ht_get_default_identity_principal_from_fetching_assets() -> Principal {
     })
 }
 
+fn ht_get_identity_principals_from_fetching_assets() -> Vec<Principal> {
+    get_holder_model(|_, model| {
+        model
+            .fetching_assets
+            .as_ref()
+            .and_then(|fa| fa.nns_assets.as_ref())
+            .map(|accounts| {
+                accounts
+                    .iter()
+                    .filter_map(|account| account.principal)
+                    .collect::<Vec<_>>()
+            })
+            .expect("identity principals not found in fetching_assets")
+    })
+}
+
 /// Advances the state machine one tick at a time (up to 10 ticks) until it lands in
 /// `HoldingState::Unsellable`. Panics if `Unsellable` is not reached within the budget.
 async fn tick_until_unsellable() {
@@ -182,6 +198,59 @@ async fn test_check_assets_have_approve() {
         },
         ..
     });
+}
+
+#[tokio::test]
+async fn test_check_assets_have_approve_on_second_identity_principal() {
+    drive_to_captured(
+        HT_STANDARD_CERT_EXPIRATION,
+        ht_get_test_deployer(),
+        HT_CAPTURED_IDENTITY_NUMBER,
+    )
+    .await;
+
+    drive_to_finish_fetch_assets(&FetchConfig::two_accounts_no_neurons()).await;
+
+    super::tick().await;
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::CheckAssets {
+            sub_state: CheckAssetsState::StartCheckAssets,
+            ..
+        }
+    });
+
+    let identity_principals = ht_get_identity_principals_from_fetching_assets();
+    assert_eq!(identity_principals.len(), 2);
+
+    ht_approve_account(
+        Account {
+            owner: identity_principals[1],
+            subaccount: Some([0u8; 32]),
+        },
+        Account {
+            owner: ht_get_test_deployer(),
+            subaccount: None,
+        },
+        0,
+        1,
+    );
+
+    super::tick().await;
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::CheckAssets {
+            sub_state: CheckAssetsState::CheckAccountsForNoApprovePrepare,
+            ..
+        }
+    });
+
+    tick_until_unsellable().await;
+
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::Unsellable {
+            reason: UnsellableReason::ApproveOnAccount { principal, sub_account }
+        },
+        ..
+    } if principal == &identity_principals[1] && sub_account == &vec![0u8; 32]);
 }
 
 // ---------------------------------------------------------------------------

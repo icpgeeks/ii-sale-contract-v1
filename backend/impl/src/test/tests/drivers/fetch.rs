@@ -6,9 +6,9 @@ use common_canister_impl::components::{
 };
 use common_canister_types::TimestampMillis;
 use contract_canister_api::types::holder::{
-    DelegationData, FetchAssetsEvent, FetchAssetsState, FetchIdentityAccountsNnsAssetsState,
-    FetchNnsAssetsState, HolderProcessingEvent, HolderState, HoldingProcessingEvent, HoldingState,
-    ObtainDelegationEvent,
+    CheckAssetsState, DelegationData, FetchAssetsEvent, FetchAssetsState,
+    FetchIdentityAccountsNnsAssetsState, FetchNnsAssetsState, HolderProcessingEvent, HolderState,
+    HoldingProcessingEvent, HoldingState, ObtainDelegationEvent,
 };
 use ic_ledger_types::{AccountIdentifier, Subaccount};
 
@@ -23,8 +23,8 @@ use crate::{
             mock_identity_accounts_ok, mock_neuron_ids, mock_neuron_ids_empty,
             mock_neurons_response, mock_prepare_delegation_ok,
         },
-        HT_SEQUENTIAL_CHECK_STEPS, TEST_DELEGATION_EXPIRATION, TEST_DELEGATION_HOSTNAME,
-        TEST_DELEGATION_KEY_1, TEST_DELEGATION_KEY_2,
+        TEST_DELEGATION_EXPIRATION, TEST_DELEGATION_HOSTNAME, TEST_DELEGATION_KEY_1,
+        TEST_DELEGATION_KEY_2,
     },
 };
 
@@ -250,6 +250,21 @@ fn is_in_get_accounts_balances() -> bool {
     })
 }
 
+fn is_in_check_accounts_for_no_approve() -> bool {
+    get_holder_model(|_, model| {
+        matches!(
+            &model.state.value,
+            HolderState::Holding {
+                sub_state: HoldingState::CheckAssets {
+                    sub_state: CheckAssetsState::CheckAccountsForNoApprovePrepare
+                        | CheckAssetsState::CheckAccountsForNoApproveSequential { .. },
+                    ..
+                }
+            }
+        )
+    })
+}
+
 /// Drives one NNS account from `NeedPrepareDelegation` through to the next
 /// account's `NeedPrepareDelegation` (or `FinishFetchAssets` if this was the last).
 ///
@@ -454,18 +469,12 @@ pub(crate) async fn drive_to_check_assets_finished(config: &FetchConfig) {
     // StartCheckAssets → CheckAccountsForNoApprovePrepare
     super::super::tick().await;
 
-    // Sequential sub-account checks.
-    // The loop runs HT_SEQUENTIAL_CHECK_STEPS + 1 times:
-    //   - iteration 0   : CheckAccountsForNoApprovePrepare → Sequential (first sub-account)
-    //   - iterations 1‥4: advance through remaining sub-accounts (including main sub-account 0)
-    // One extra tick after the loop transitions to FinishCheckAssets.
-    for _ in 0..=HT_SEQUENTIAL_CHECK_STEPS {
+    // Drain the approval scan until it transitions to FinishCheckAssets.
+    // This is state-based rather than count-based because multi-account identities
+    // legitimately increase the number of (principal, subaccount) pairs to inspect.
+    while is_in_check_accounts_for_no_approve() {
         super::super::tick().await;
-        // State: CheckAccountsForNoApproveSequential
     }
-
-    // Final tick → FinishCheckAssets
-    super::super::tick().await;
     // State: FinishCheckAssets
 }
 
