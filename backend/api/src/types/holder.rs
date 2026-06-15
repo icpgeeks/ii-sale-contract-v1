@@ -213,9 +213,16 @@ pub enum SaleDealAcceptSubState {
 
 #[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 pub enum UnsellableReason {
-    ApproveOnAccount { sub_account: Vec<u8> },
-    ValidationFailed { reason: String },
-    CheckLimitFailed { reason: LimitFailureReason },
+    ApproveOnAccount {
+        principal: Principal,
+        sub_account: Vec<u8>,
+    },
+    ValidationFailed {
+        reason: String,
+    },
+    CheckLimitFailed {
+        reason: LimitFailureReason,
+    },
     CertificateExpired,
     SaleDealCompleted,
 }
@@ -462,9 +469,11 @@ pub enum CheckAssetsEvent {
         sub_accounts: Vec<(Principal, Vec<u8>)>,
     },
     CheckAccountsAdvance {
+        principal: Principal,
         sub_account: Vec<u8>,
     },
     AccountHasApprove {
+        principal: Principal,
         sub_account: Vec<u8>,
     },
     CheckAssetsFinished,

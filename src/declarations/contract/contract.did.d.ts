@@ -238,10 +238,10 @@ export type CheckApprovedBalanceError = { 'InsufficientAllowance' : null } |
   { 'LedgerUnavailable' : { 'reason' : string } } |
   { 'AllowanceExpiresTooEarly' : null };
 export type CheckAssetsEvent = {
-    'CheckAccountsAdvance' : { 'sub_account' : Uint8Array | number[] }
+    'CheckAccountsAdvance' : { 'principal' : Principal, 'sub_account' : Uint8Array | number[] }
   } |
   { 'CheckAssetsFinished' : null } |
-  { 'AccountHasApprove' : { 'sub_account' : Uint8Array | number[] } } |
+  { 'AccountHasApprove' : { 'principal' : Principal, 'sub_account' : Uint8Array | number[] } } |
   { 'CheckAssetsStarted' : null } |
   {
     'CheckAccountsPrepared' : {
@@ -874,7 +874,7 @@ export interface TransformArgs {
 export type UnsellableReason = { 'ValidationFailed' : { 'reason' : string } } |
   { 'CertificateExpired' : null } |
   { 'CheckLimitFailed' : { 'reason' : LimitFailureReason } } |
-  { 'ApproveOnAccount' : { 'sub_account' : Uint8Array | number[] } } |
+  { 'ApproveOnAccount' : { 'principal' : Principal, 'sub_account' : Uint8Array | number[] } } |
   { 'SaleDealCompleted' : null };
 export interface _SERVICE {
   'accept_buyer_offer' : ActorMethod<

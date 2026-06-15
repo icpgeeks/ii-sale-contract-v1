@@ -193,7 +193,7 @@ export const idlFactory = ({ IDL }) => {
     'ValidationFailed' : IDL.Record({ 'reason' : IDL.Text }),
     'CertificateExpired' : IDL.Null,
     'CheckLimitFailed' : IDL.Record({ 'reason' : LimitFailureReason }),
-    'ApproveOnAccount' : IDL.Record({ 'sub_account' : IDL.Vec(IDL.Nat8) }),
+    'ApproveOnAccount' : IDL.Record({ 'principal' : IDL.Principal, 'sub_account' : IDL.Vec(IDL.Nat8) }),
     'SaleDealCompleted' : IDL.Null,
   });
   const ReleaseInitiation = IDL.Variant({
@@ -711,9 +711,9 @@ export const idlFactory = ({ IDL }) => {
     'HolderAuthnMethodDeleted' : IDL.Null,
   });
   const CheckAssetsEvent = IDL.Variant({
-    'CheckAccountsAdvance' : IDL.Record({ 'sub_account' : IDL.Vec(IDL.Nat8) }),
+    'CheckAccountsAdvance' : IDL.Record({ 'principal' : IDL.Principal, 'sub_account' : IDL.Vec(IDL.Nat8) }),
     'CheckAssetsFinished' : IDL.Null,
-    'AccountHasApprove' : IDL.Record({ 'sub_account' : IDL.Vec(IDL.Nat8) }),
+    'AccountHasApprove' : IDL.Record({ 'principal' : IDL.Principal, 'sub_account' : IDL.Vec(IDL.Nat8) }),
     'CheckAssetsStarted' : IDL.Null,
     'CheckAccountsPrepared' : IDL.Record({
       'sub_accounts' : IDL.Vec(IDL.Tuple(IDL.Principal, IDL.Vec(IDL.Nat8))),

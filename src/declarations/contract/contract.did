@@ -233,9 +233,9 @@ type CheckApprovedBalanceError = variant {
   AllowanceExpiresTooEarly;
 };
 type CheckAssetsEvent = variant {
-  CheckAccountsAdvance : record { sub_account : blob };
+  CheckAccountsAdvance : record { principal : principal; sub_account : blob };
   CheckAssetsFinished;
-  AccountHasApprove : record { sub_account : blob };
+  AccountHasApprove : record { principal : principal; sub_account : blob };
   CheckAssetsStarted;
   CheckAccountsPrepared : record {
     sub_accounts : vec record { principal; blob };
@@ -821,7 +821,7 @@ type UnsellableReason = variant {
   ValidationFailed : record { reason : text };
   CertificateExpired;
   CheckLimitFailed : record { reason : LimitFailureReason };
-  ApproveOnAccount : record { sub_account : blob };
+  ApproveOnAccount : record { principal : principal; sub_account : blob };
   SaleDealCompleted;
 };
 service : (InitContractArgs) -> {

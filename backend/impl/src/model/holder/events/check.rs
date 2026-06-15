@@ -72,7 +72,10 @@ pub(crate) fn handle_check_assets_event(
             );
             Ok(())
         }
-        CheckAssetsEvent::CheckAccountsAdvance { sub_account } => match &model.state.value {
+        CheckAssetsEvent::CheckAccountsAdvance {
+            principal,
+            sub_account,
+        } => match &model.state.value {
             HolderState::Holding {
                 sub_state:
                     HoldingState::CheckAssets {
@@ -82,7 +85,9 @@ pub(crate) fn handle_check_assets_event(
                     },
             } => {
                 let mut new_sub_accounts = sub_accounts.clone();
-                new_sub_accounts.retain(|(_, sa)| sa != sub_account);
+                new_sub_accounts.retain(|(current_principal, current_sub_account)| {
+                    current_principal != principal || current_sub_account != sub_account
+                });
 
                 if new_sub_accounts.is_empty() {
                     set_check_sub_state(
@@ -105,13 +110,17 @@ pub(crate) fn handle_check_assets_event(
             }
             _ => Err(UpdateHolderError::WrongState),
         },
-        CheckAssetsEvent::AccountHasApprove { sub_account } => {
+        CheckAssetsEvent::AccountHasApprove {
+            principal,
+            sub_account,
+        } => {
             let wrap_holding_state = check_state_matches!(
                 model,
                 CheckAssetsState::CheckAccountsForNoApproveSequential { .. }
             );
             let unsellable_sub_state = HoldingState::Unsellable {
                 reason: UnsellableReason::ApproveOnAccount {
+                    principal: *principal,
                     sub_account: sub_account.clone(),
                 },
             };
