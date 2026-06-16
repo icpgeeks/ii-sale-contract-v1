@@ -49,22 +49,26 @@ pub(crate) async fn process(
         Ok(allowance) if allowance.is_empty() => {
             log_info!(
                 env,
-                "Account approvals: sub account {} checked.",
+                "Account approvals: principal {}, sub account {} checked.",
+                nns_principal.to_text(),
                 hex::encode(&sub_account)
             );
 
             Ok(CheckAssetsEvent::CheckAccountsAdvance {
+                principal: nns_principal,
                 sub_account: sub_account.clone(),
             })
         }
         Ok(_) => {
             log_info!(
                 env,
-                "Account approvals: sub account {} has approve.",
+                "Account approvals: principal {}, sub account {} has approve.",
+                nns_principal.to_text(),
                 hex::encode(&sub_account)
             );
 
             Ok(CheckAssetsEvent::AccountHasApprove {
+                principal: nns_principal,
                 sub_account: sub_account.clone(),
             })
         }

@@ -48,7 +48,8 @@ const getNnsStepContextFrom = (innerStep: NnsAssetsStep): NnsStepContext => {
             }
             break;
         }
-        case 'deletingNeuronHotkeys': {
+        case 'deletingNeuronHotkeys':
+        case 'verifyingNeuronHotkeyDeletion': {
             current = 2;
             if (innerStep.hotkeysLeft > 0) {
                 items[2].title = (

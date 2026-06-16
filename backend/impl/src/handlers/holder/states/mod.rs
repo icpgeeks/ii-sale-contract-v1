@@ -65,6 +65,7 @@ pub mod transfer_referral_reward;
 pub mod transfer_sale_deal_amount_to_seller_account;
 pub mod transfer_sale_deal_amount_to_transit_account;
 pub mod validate_assets;
+pub mod verify_neuron_hotkey_deletion;
 
 fn update_holder(
     lock: &HolderLock,

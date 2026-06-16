@@ -67,6 +67,20 @@ pub(crate) async fn process(
                 )?;
                 return Ok(ProcessingResult::Continue);
             }
+            if identity_info.email_recovery.is_none() && is_email_recovery_present(&response_data)?
+            {
+                log_error!(
+                    env,
+                    "Identity authn methods: detected identity API change - missing email_recovery",
+                );
+                update_holder(
+                    lock,
+                    HolderProcessingEvent::Capturing {
+                        event: CaptureProcessingEvent::IdentityAPIChangeDetected,
+                    },
+                )?;
+                return Ok(ProcessingResult::Continue);
+            }
             identity_info
         }
         IdentityInfoRet::Err(error) => match error {
@@ -245,6 +259,19 @@ fn holder_authn_method_lost(
 pub(crate) fn is_openid_credentials_present(
     response_data: &[u8],
 ) -> Result<bool, HolderProcessingError> {
+    is_non_empty_optional_vec_field_present(response_data, "openid_credentials")
+}
+
+pub(crate) fn is_email_recovery_present(
+    response_data: &[u8],
+) -> Result<bool, HolderProcessingError> {
+    is_non_empty_optional_vec_field_present(response_data, "email_recovery")
+}
+
+fn is_non_empty_optional_vec_field_present(
+    response_data: &[u8],
+    field_name: &str,
+) -> Result<bool, HolderProcessingError> {
     let args = IDLArgs::from_bytes(response_data).map_err(to_internal_error)?;
     if args.args.is_empty() {
         return Ok(false);
@@ -253,11 +280,10 @@ pub(crate) fn is_openid_credentials_present(
     if let candid::IDLValue::Variant(ret) = args.args.first().unwrap() {
         let value = &ret.0.val;
         if let candid::IDLValue::Record(info) = value {
-            let openid_credentials_field =
-                candid::types::Label::Named("openid_credentials".to_string()).get_id();
+            let field_id = candid::types::Label::Named(field_name.to_string()).get_id();
 
             for field in info {
-                if field.id.get_id() == openid_credentials_field {
+                if field.id.get_id() == field_id {
                     return Ok(if let candid::IDLValue::Opt(list) = &field.val {
                         if let candid::IDLValue::Vec(v) = list.deref() {
                             !v.is_empty()

@@ -168,6 +168,11 @@ pub enum FetchNnsAssetsState {
     DeletingNeuronsHotkeys {
         neuron_hotkeys: Vec<(NeuronId, Vec<Principal>)>,
     },
+    VerifyingNeuronHotkeyDeletion {
+        neuron_hotkeys: Vec<(NeuronId, Vec<Principal>)>,
+        neuron_id: NeuronId,
+        hot_key: Principal,
+    },
     GetAccountsInformation,
     GetAccountsBalances,
 }
@@ -213,9 +218,16 @@ pub enum SaleDealAcceptSubState {
 
 #[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 pub enum UnsellableReason {
-    ApproveOnAccount { sub_account: Vec<u8> },
-    ValidationFailed { reason: String },
-    CheckLimitFailed { reason: LimitFailureReason },
+    ApproveOnAccount {
+        principal: Principal,
+        sub_account: Vec<u8>,
+    },
+    ValidationFailed {
+        reason: String,
+    },
+    CheckLimitFailed {
+        reason: LimitFailureReason,
+    },
     CertificateExpired,
     SaleDealCompleted,
 }
@@ -418,7 +430,18 @@ pub enum FetchAssetsEvent {
     NeuronHotkeyDeleted {
         neuron_id: NeuronId,
         hot_key: Principal,
-        failed: Option<String>,
+    },
+    NeuronHotkeyDeletionVerifyStarted {
+        neuron_id: NeuronId,
+        hot_key: Principal,
+    },
+    NeuronHotkeyVerifiedAbsent {
+        neuron_id: NeuronId,
+        hot_key: Principal,
+    },
+    NeuronHotkeyVerifiedPresent {
+        neuron_id: NeuronId,
+        hot_key: Principal,
     },
     AllNeuronsHotkeysDeleted,
     AccountsInformationGot {
@@ -462,9 +485,11 @@ pub enum CheckAssetsEvent {
         sub_accounts: Vec<(Principal, Vec<u8>)>,
     },
     CheckAccountsAdvance {
+        principal: Principal,
         sub_account: Vec<u8>,
     },
     AccountHasApprove {
+        principal: Principal,
         sub_account: Vec<u8>,
     },
     CheckAssetsFinished,

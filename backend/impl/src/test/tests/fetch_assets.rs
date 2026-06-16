@@ -5,17 +5,21 @@ use common_canister_impl::components::{
     nns::api::ListNeuronsResponse,
     nns_dap::api::{AccountDetails, SubAccountDetails},
 };
+use common_canister_types::Timestamped;
 use contract_canister_api::types::holder::{
     CancelSaleDealState, DelegationState, FetchAssetsState, FetchIdentityAccountsNnsAssetsState,
-    FetchNnsAssetsState, HolderState, HoldingState, LimitFailureReason, UnsellableReason,
+    FetchNnsAssetsState, HolderProcessingError, HolderState, HoldingState, LimitFailureReason,
+    UnsellableReason,
 };
 use ic_ledger_types::{AccountIdentifier, Subaccount};
 
 use crate::{
     handlers::holder::states::get_holder_model,
-    result_err_matches, result_ok_with_holder_information,
+    processing_err_matches, result_err_matches, result_ok_with_holder_information,
     test::tests::{
-        components::{ic::set_test_caller, time::set_test_time},
+        components::{
+            ic::set_test_caller, ic_agent::set_test_ic_agent_response, time::set_test_time,
+        },
         drivers::fetch::{send_delegation_got, FetchConfig},
         ht_get_test_deployer, ht_get_test_other,
         sale::ht_set_sale_intentions,
@@ -31,7 +35,7 @@ use crate::{
         HT_SALE_DEAL_SAFE_CLOSE_DURATION, HT_STANDARD_CERT_EXPIRATION, TEST_DELEGATION_KEY_1,
         TEST_DELEGATION_KEY_2,
     },
-    test_state_matches,
+    test_state_extract_neuron_hotkeys, test_state_matches,
     updates::holder::{
         retry_prepare_delegation::retry_prepare_delegation_int, set_sale_offer::set_sale_offer_int,
     },
@@ -241,6 +245,212 @@ async fn test_fetching_assets_includes_current_nns_data() {
         slot_assets.controlled_neurons.is_some(),
         "controlled_neurons should be populated after neurons-information page was processed"
     );
+}
+
+#[tokio::test]
+async fn test_failed_neuron_hotkey_delete_verifies_absent_hotkey() {
+    use candid::Encode;
+    use common_canister_impl::components::nns::api::{
+        Command1, GovernanceError, ListNeuronsResponse, ManageNeuronResponse,
+    };
+
+    use crate::test::tests::support::{
+        fixtures::fake_neuron,
+        mocks::{
+            mock_identity_accounts_no_accounts, mock_neuron_ids, mock_neurons_response,
+            mock_prepare_delegation_ok_default,
+        },
+    };
+
+    drive_to_captured(
+        HT_STANDARD_CERT_EXPIRATION,
+        ht_get_test_deployer(),
+        HT_CAPTURED_IDENTITY_NUMBER,
+    )
+    .await;
+
+    super::tick().await;
+    mock_identity_accounts_no_accounts();
+    super::tick().await;
+    mock_prepare_delegation_ok_default();
+    super::tick().await;
+    send_delegation_got(TEST_DELEGATION_KEY_1.to_vec());
+
+    let identity_principal =
+        get_holder_model(|_, model| model.get_delegation_controller().unwrap());
+    let lingering_hotkey = ht_get_test_deployer();
+
+    mock_neuron_ids(vec![1u64]);
+    super::tick().await;
+
+    mock_neurons_response(&ListNeuronsResponse {
+        neuron_infos: vec![],
+        full_neurons: vec![fake_neuron(
+            1,
+            Some(identity_principal),
+            vec![lingering_hotkey],
+        )],
+        total_pages_available: None,
+    });
+    super::tick().await;
+    super::tick().await;
+
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::FetchAssets {
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                    sub_state: FetchNnsAssetsState::DeletingNeuronsHotkeys { .. },
+                    ..
+                },
+                ..
+            },
+            ..
+        }
+    });
+
+    let expected_hotkeys = test_state_extract_neuron_hotkeys!();
+    assert_eq!(expected_hotkeys.len(), 1);
+    assert_eq!(expected_hotkeys[0].0, 1);
+    assert_eq!(expected_hotkeys[0].1, vec![lingering_hotkey]);
+
+    set_test_ic_agent_response(
+        Encode!(&ManageNeuronResponse {
+            command: Some(Command1::Error(GovernanceError {
+                error_message: "remove hotkey rejected".to_string(),
+                error_type: 1,
+            })),
+        })
+        .unwrap(),
+    );
+
+    super::tick().await;
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::FetchAssets {
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                    sub_state: FetchNnsAssetsState::VerifyingNeuronHotkeyDeletion {
+                        neuron_id,
+                        hot_key,
+                        ..
+                    },
+                    ..
+                },
+                ..
+            },
+            ..
+        }
+    } if *neuron_id == 1 && *hot_key == lingering_hotkey);
+    assert_eq!(test_state_extract_neuron_hotkeys!(), expected_hotkeys);
+
+    mock_neurons_response(&ListNeuronsResponse {
+        neuron_infos: vec![],
+        full_neurons: vec![fake_neuron(1, Some(identity_principal), vec![])],
+        total_pages_available: None,
+    });
+    super::tick().await;
+
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::FetchAssets {
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                    sub_state: FetchNnsAssetsState::DeletingNeuronsHotkeys { .. },
+                    ..
+                },
+                ..
+            },
+            ..
+        }
+    });
+    assert!(test_state_extract_neuron_hotkeys!().is_empty());
+}
+
+#[tokio::test]
+async fn test_failed_neuron_hotkey_delete_verifies_present_hotkey_retries_with_backoff() {
+    use candid::Encode;
+    use common_canister_impl::components::nns::api::{
+        Command1, GovernanceError, ListNeuronsResponse, ManageNeuronResponse,
+    };
+
+    use crate::test::tests::support::{
+        fixtures::fake_neuron,
+        mocks::{
+            mock_identity_accounts_no_accounts, mock_neuron_ids, mock_neurons_response,
+            mock_prepare_delegation_ok_default,
+        },
+    };
+
+    drive_to_captured(
+        HT_STANDARD_CERT_EXPIRATION,
+        ht_get_test_deployer(),
+        HT_CAPTURED_IDENTITY_NUMBER,
+    )
+    .await;
+
+    super::tick().await;
+    mock_identity_accounts_no_accounts();
+    super::tick().await;
+    mock_prepare_delegation_ok_default();
+    super::tick().await;
+    send_delegation_got(TEST_DELEGATION_KEY_1.to_vec());
+
+    let identity_principal =
+        get_holder_model(|_, model| model.get_delegation_controller().unwrap());
+    let lingering_hotkey = ht_get_test_deployer();
+
+    mock_neuron_ids(vec![1u64]);
+    super::tick().await;
+
+    mock_neurons_response(&ListNeuronsResponse {
+        neuron_infos: vec![],
+        full_neurons: vec![fake_neuron(
+            1,
+            Some(identity_principal),
+            vec![lingering_hotkey],
+        )],
+        total_pages_available: None,
+    });
+    super::tick().await;
+    super::tick().await;
+
+    let expected_hotkeys = test_state_extract_neuron_hotkeys!();
+
+    set_test_ic_agent_response(
+        Encode!(&ManageNeuronResponse {
+            command: Some(Command1::Error(GovernanceError {
+                error_message: "remove hotkey rejected".to_string(),
+                error_type: 1,
+            })),
+        })
+        .unwrap(),
+    );
+    super::tick().await;
+
+    mock_neurons_response(&ListNeuronsResponse {
+        neuron_infos: vec![],
+        full_neurons: vec![fake_neuron(
+            1,
+            Some(identity_principal),
+            vec![lingering_hotkey],
+        )],
+        total_pages_available: None,
+    });
+    super::tick().await;
+
+    test_state_matches!(HolderState::Holding {
+        sub_state: HoldingState::FetchAssets {
+            fetch_assets_state: FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                sub_state: FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                    sub_state: FetchNnsAssetsState::DeletingNeuronsHotkeys { .. },
+                    ..
+                },
+                ..
+            },
+            ..
+        }
+    });
+    assert_eq!(test_state_extract_neuron_hotkeys!(), expected_hotkeys);
+
+    processing_err_matches!(HolderProcessingError::IcAgentError { .. });
 }
 
 // ---------------------------------------------------------------------------

@@ -1,10 +1,11 @@
 use std::collections::{BTreeMap, HashSet};
 
+use candid::Principal;
 use common_canister_types::{TimestampMillis, Timestamped};
 use contract_canister_api::types::holder::{
     CancelSaleDealState, FetchAssetsEvent, FetchAssetsState, FetchIdentityAccountsNnsAssetsState,
     FetchNnsAssetsState, HolderState, HoldingState, IdentityAccountNnsAssets, LimitFailureReason,
-    NeuronAsset, NeuronInformation, NnsHolderAssets, UnsellableReason,
+    NeuronAsset, NeuronId, NeuronInformation, NnsHolderAssets, UnsellableReason,
 };
 
 use crate::model::holder::{HolderAssets, HolderModel, UpdateHolderError};
@@ -32,6 +33,19 @@ fn neuron_is_empty(info: &NeuronInformation) -> bool {
     info.cached_neuron_stake_e8s == 0
         && info.maturity_e8s_equivalent == 0
         && info.staked_maturity_e8s_equivalent.unwrap_or_default() == 0
+}
+
+fn remove_hotkey_from_queue(
+    neuron_hotkeys: &mut Vec<(NeuronId, Vec<Principal>)>,
+    neuron_id: &NeuronId,
+    hot_key: &Principal,
+) {
+    neuron_hotkeys.retain_mut(|entry| {
+        if &entry.0 == neuron_id {
+            entry.1.retain(|hk| hk != hot_key);
+        }
+        !entry.1.is_empty()
+    });
 }
 
 /// Returns (identity_account_number, wrap_holding_state) if currently in FetchNnsAssetsState with the given sub_state pattern.
@@ -421,9 +435,7 @@ pub(crate) fn handle_fetch_assets_event(
             Ok(())
         }
 
-        FetchAssetsEvent::NeuronHotkeyDeleted {
-            neuron_id, hot_key, ..
-        } => {
+        FetchAssetsEvent::NeuronHotkeyDeleted { neuron_id, hot_key } => {
             let neuron_hotkeys = match &mut model.state.value {
                 HolderState::Holding {
                     sub_state:
@@ -447,12 +459,138 @@ pub(crate) fn handle_fetch_assets_event(
                 }
             };
 
-            neuron_hotkeys.retain_mut(|entry| {
-                if &entry.0 == neuron_id {
-                    entry.1.retain(|hk| hk != hot_key);
-                }
-                !entry.1.is_empty()
-            });
+            remove_hotkey_from_queue(neuron_hotkeys, neuron_id, hot_key);
+            Ok(())
+        }
+
+        FetchAssetsEvent::NeuronHotkeyDeletionVerifyStarted { neuron_id, hot_key } => {
+            let (identity_account_number, wrap_holding_state, neuron_hotkeys) = match &model
+                .state
+                .value
+            {
+                HolderState::Holding {
+                    sub_state:
+                        HoldingState::FetchAssets {
+                            fetch_assets_state:
+                                FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                                    sub_state:
+                                        FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                                            identity_account_number,
+                                            sub_state:
+                                                FetchNnsAssetsState::DeletingNeuronsHotkeys {
+                                                    neuron_hotkeys,
+                                                },
+                                            ..
+                                        },
+                                },
+                            wrap_holding_state,
+                        },
+                } => (
+                    *identity_account_number,
+                    wrap_holding_state.clone(),
+                    neuron_hotkeys.clone(),
+                ),
+                _ => return Err(UpdateHolderError::WrongState),
+            };
+
+            set_nns_assets_sub_state(
+                model,
+                time,
+                wrap_holding_state,
+                identity_account_number,
+                FetchNnsAssetsState::VerifyingNeuronHotkeyDeletion {
+                    neuron_hotkeys,
+                    neuron_id: *neuron_id,
+                    hot_key: *hot_key,
+                },
+            );
+            Ok(())
+        }
+
+        FetchAssetsEvent::NeuronHotkeyVerifiedAbsent { neuron_id, hot_key } => {
+            let (identity_account_number, wrap_holding_state, mut neuron_hotkeys) = match &model
+                .state
+                .value
+            {
+                HolderState::Holding {
+                    sub_state:
+                        HoldingState::FetchAssets {
+                            fetch_assets_state:
+                                FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                                    sub_state:
+                                        FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                                            identity_account_number,
+                                            sub_state:
+                                                FetchNnsAssetsState::VerifyingNeuronHotkeyDeletion {
+                                                    neuron_hotkeys,
+                                                    ..
+                                                },
+                                            ..
+                                        },
+                                },
+                            wrap_holding_state,
+                        },
+                } => (
+                    *identity_account_number,
+                    wrap_holding_state.clone(),
+                    neuron_hotkeys.clone(),
+                ),
+                _ => return Err(UpdateHolderError::WrongState),
+            };
+
+            remove_hotkey_from_queue(&mut neuron_hotkeys, neuron_id, hot_key);
+
+            set_nns_assets_sub_state(
+                model,
+                time,
+                wrap_holding_state,
+                identity_account_number,
+                FetchNnsAssetsState::DeletingNeuronsHotkeys { neuron_hotkeys },
+            );
+            Ok(())
+        }
+
+        FetchAssetsEvent::NeuronHotkeyVerifiedPresent {
+            neuron_id: _,
+            hot_key: _,
+        } => {
+            let (identity_account_number, wrap_holding_state, neuron_hotkeys) = match &model
+                .state
+                .value
+            {
+                HolderState::Holding {
+                    sub_state:
+                        HoldingState::FetchAssets {
+                            fetch_assets_state:
+                                FetchAssetsState::FetchIdentityAccountsNnsAssetsState {
+                                    sub_state:
+                                        FetchIdentityAccountsNnsAssetsState::FetchNnsAssetsState {
+                                            identity_account_number,
+                                            sub_state:
+                                                FetchNnsAssetsState::VerifyingNeuronHotkeyDeletion {
+                                                    neuron_hotkeys,
+                                                    ..
+                                                },
+                                            ..
+                                        },
+                                },
+                            wrap_holding_state,
+                        },
+                } => (
+                    *identity_account_number,
+                    wrap_holding_state.clone(),
+                    neuron_hotkeys.clone(),
+                ),
+                _ => return Err(UpdateHolderError::WrongState),
+            };
+
+            set_nns_assets_sub_state(
+                model,
+                time,
+                wrap_holding_state,
+                identity_account_number,
+                FetchNnsAssetsState::DeletingNeuronsHotkeys { neuron_hotkeys },
+            );
             Ok(())
         }
 

@@ -238,10 +238,18 @@ export type CheckApprovedBalanceError = { 'InsufficientAllowance' : null } |
   { 'LedgerUnavailable' : { 'reason' : string } } |
   { 'AllowanceExpiresTooEarly' : null };
 export type CheckAssetsEvent = {
-    'CheckAccountsAdvance' : { 'sub_account' : Uint8Array | number[] }
+    'CheckAccountsAdvance' : {
+      'principal' : Principal,
+      'sub_account' : Uint8Array | number[],
+    }
   } |
   { 'CheckAssetsFinished' : null } |
-  { 'AccountHasApprove' : { 'sub_account' : Uint8Array | number[] } } |
+  {
+    'AccountHasApprove' : {
+      'principal' : Principal,
+      'sub_account' : Uint8Array | number[],
+    }
+  } |
   { 'CheckAssetsStarted' : null } |
   {
     'CheckAccountsPrepared' : {
@@ -325,7 +333,19 @@ export type FetchAssetsEvent = {
   } |
   { 'NeuronsInformationObtained' : null } |
   {
+    'NeuronHotkeyVerifiedPresent' : {
+      'hot_key' : Principal,
+      'neuron_id' : bigint,
+    }
+  } |
+  {
     'NeuronsInformationGotEmpty' : { 'neuron_ids' : BigUint64Array | bigint[] }
+  } |
+  {
+    'NeuronHotkeyDeletionVerifyStarted' : {
+      'hot_key' : Principal,
+      'neuron_id' : bigint,
+    }
   } |
   {
     'IdentityAccountsGot' : {
@@ -334,14 +354,14 @@ export type FetchAssetsEvent = {
     }
   } |
   { 'NeuronsIdsGot' : { 'neuron_ids' : BigUint64Array | bigint[] } } |
-  { 'AccountsBalancesObtained' : null } |
   {
-    'NeuronHotkeyDeleted' : {
+    'NeuronHotkeyVerifiedAbsent' : {
       'hot_key' : Principal,
-      'failed' : [] | [string],
       'neuron_id' : bigint,
     }
   } |
+  { 'AccountsBalancesObtained' : null } |
+  { 'NeuronHotkeyDeleted' : { 'hot_key' : Principal, 'neuron_id' : bigint } } |
   {
     'NnsAssetsForAccountFetched' : { 'identity_account_number' : [] | [bigint] }
   } |
@@ -399,7 +419,14 @@ export type FetchNnsAssetsState = { 'GetNeuronsIds' : null } |
     }
   } |
   { 'GetAccountsInformation' : null } |
-  { 'GetAccountsBalances' : null };
+  { 'GetAccountsBalances' : null } |
+  {
+    'VerifyingNeuronHotkeyDeletion' : {
+      'neuron_hotkeys' : Array<[bigint, Array<Principal>]>,
+      'hot_key' : Principal,
+      'neuron_id' : bigint,
+    }
+  };
 export type GeHolderEventsResponse = { 'Ok' : GetHolderEventsResult };
 export type GetCanisterMetricsError = { 'PermissionDenied' : null };
 export type GetCanisterMetricsResponse = { 'Ok' : GetCanisterMetricsResult } |
@@ -874,7 +901,12 @@ export interface TransformArgs {
 export type UnsellableReason = { 'ValidationFailed' : { 'reason' : string } } |
   { 'CertificateExpired' : null } |
   { 'CheckLimitFailed' : { 'reason' : LimitFailureReason } } |
-  { 'ApproveOnAccount' : { 'sub_account' : Uint8Array | number[] } } |
+  {
+    'ApproveOnAccount' : {
+      'principal' : Principal,
+      'sub_account' : Uint8Array | number[],
+    }
+  } |
   { 'SaleDealCompleted' : null };
 export interface _SERVICE {
   'accept_buyer_offer' : ActorMethod<

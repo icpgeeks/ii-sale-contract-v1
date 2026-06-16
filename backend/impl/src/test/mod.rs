@@ -393,6 +393,7 @@ macro_rules! test_state_extract_neuron_hotkeys {
                     },
             } => match sub_state {
                 FetchNnsAssetsState::DeletingNeuronsHotkeys { neuron_hotkeys }
+                | FetchNnsAssetsState::VerifyingNeuronHotkeyDeletion { neuron_hotkeys, .. }
                 | FetchNnsAssetsState::GetNeuronsInformation { neuron_hotkeys } => {
                     neuron_hotkeys.clone()
                 }
