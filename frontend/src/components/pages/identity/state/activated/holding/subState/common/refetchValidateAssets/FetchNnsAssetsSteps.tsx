@@ -48,7 +48,8 @@ const getNnsStepContextFrom = (innerStep: NnsAssetsStep): NnsStepContext => {
             }
             break;
         }
-        case 'deletingNeuronHotkeys': {
+        case 'deletingNeuronHotkeys':
+        case 'verifyingNeuronHotkeyDeletion': {
             current = 2;
             if (innerStep.hotkeysLeft > 0) {
                 items[2].title = (
@@ -57,20 +58,6 @@ const getNnsStepContextFrom = (innerStep: NnsAssetsStep): NnsStepContext => {
                         <span className="gf-font-size-small">{i18.holder.state.holding.fetchingAssets.removingHotkeys.detailed(innerStep.hotkeysLeft)}</span>
                     </div>
                 );
-            }
-            break;
-        }
-        case 'verifyingNeuronHotkeyDeletion': {
-            current = 2;
-            if (innerStep.hotkeysLeft > 0) {
-                items[2].title = (
-                    <div>
-                        <span>{i18.holder.state.holding.fetchingAssets.verifyingHotkeyRemoval.simple}</span>{' '}
-                        <span className="gf-font-size-small">{i18.holder.state.holding.fetchingAssets.verifyingHotkeyRemoval.detailed(innerStep.hotkeysLeft)}</span>
-                    </div>
-                );
-            } else {
-                items[2].title = i18.holder.state.holding.fetchingAssets.verifyingHotkeyRemoval.simple;
             }
             break;
         }
