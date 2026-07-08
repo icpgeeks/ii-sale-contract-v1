@@ -272,7 +272,7 @@ FEATURES
 
 - Operates as isolated canister with no shared state and no external controllers once deployed.
 - Receives 100-day certificate providing full immutability while valid.
-- Takes temporary exclusive custody and control of Internet Identity by removing all other passkeys, including seed phrase and recovery email.
+- Takes temporary exclusive custody and control of Internet Identity by removing all other passkeys, including seed phrase, recovery email, and MCP access bindings.
 - Removes all neuron hotkeys to eliminate residual control by seller.
 - Supports Internet Identities with multiple accounts.
 - Detects and displays ICP accounts and neurons from NNS Dapp.
@@ -451,6 +451,11 @@ This description does not cover all possible risks, limitations, or edge cases. 
                     removingPasskeys: {
                         simple: 'Removing passkeys',
                         detailed: (passkeysLeft: number) => `(${passkeysLeft} ${passkeysLeft == 1 ? 'passkey' : 'passkeys'} left)`
+                    },
+                    removingMcpAccess: {
+                        simple: 'Removing MCP access',
+                        detailed: (accountsLeft: number) =>
+                            `(${accountsLeft} ${accountsLeft == 1 ? 'account' : 'accounts'} left)`
                     }
                 }
             },

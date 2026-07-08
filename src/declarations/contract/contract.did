@@ -143,6 +143,7 @@ type CaptureError = variant {
 };
 type CaptureProcessingEvent = variant {
   HolderAuthnMethodRegistered;
+  IdentityMcpCleanupSkipped;
   AuthnMethodSessionRegistrationConfirmed : ConfirmHolderAuthnMethodRegistrationArgs;
   GetHolderContractPrincipalUnauthorized;
   IdentityAuthnMethodProtected : record {
@@ -159,6 +160,7 @@ type CaptureProcessingEvent = variant {
   ProtectedIdentityAuthnMethodDeleted;
   IdentityAuthnMethodsPartiallyDeleted;
   AuthnMethodSessionRegisterError : record { error : CaptureError };
+  IdentityMcpConfigObtained;
   EcdsaKeyCreated : record { ecdsa_key : blob };
   AuthnMethodSessionRegistered : record {
     confirmation_code : text;
@@ -167,6 +169,7 @@ type CaptureProcessingEvent = variant {
   HolderAuthnMethodLost;
   AuthnMethodSessionRegistrationExpired;
   CancelCapture;
+  IdentityMcpCleanupCompleted;
   IdentityAuthnMethodsObtained : record {
     authn_pubkeys : vec blob;
     email_recovery_addresses : vec text;
@@ -174,6 +177,7 @@ type CaptureProcessingEvent = variant {
     openid_credentials : opt vec record { text; text; text };
   };
   HolderContractPrincipalCheckPassed;
+  IdentityMcpCleanupResync;
   IdentityAPIChangeDetected;
   HolderAuthnMethodRegisterError : record { error : CaptureError };
   IdentityAuthnMethodDeleted : record { public_key : blob };
@@ -189,6 +193,8 @@ type CaptureProcessingEvent = variant {
 type CaptureState = variant {
   CaptureFailed : record { error : CaptureError };
   CreateEcdsaKey;
+  DisablingIdentityMcpConfig;
+  ObtainingIdentityMcpConfig;
   GetHolderContractAccounts : ConfirmHolderAuthnMethodRegistrationArgs;
   NeedConfirmAuthnMethodSessionRegistration : record {
     confirmation_code : text;

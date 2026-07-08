@@ -12,8 +12,9 @@ use crate::{
         check_confirmation_holder_registration_expiry,
         check_confirmation_owner_registration_expiry, confirm_authn_method_registration,
         create_ecdsa_key, delete_holder_authn_method, delete_identity_authn_methods,
-        enter_authn_method_registration_mode, exit_orphaned_registration_mode, finish_capture,
-        obtain_identity_authn_methods, process_holding_state, sleep_processing, start_capture,
+        disable_identity_mcp_config, enter_authn_method_registration_mode,
+        exit_orphaned_registration_mode, finish_capture, obtain_identity_authn_methods,
+        obtain_identity_mcp_config, process_holding_state, sleep_processing, start_capture,
         start_release,
     },
     processor_toolkit, read_state,
@@ -64,6 +65,12 @@ fn get_capture_processor<'a>(capture_state: CaptureState) -> Processor<'a> {
         }
         CaptureState::DeletingIdentityAuthnMethods { .. } => {
             processor_toolkit!(delete_identity_authn_methods)
+        }
+        CaptureState::ObtainingIdentityMcpConfig => {
+            processor_toolkit!(obtain_identity_mcp_config)
+        }
+        CaptureState::DisablingIdentityMcpConfig => {
+            processor_toolkit!(disable_identity_mcp_config)
         }
         CaptureState::NeedDeleteProtectedIdentityAuthnMethod { .. } => {
             processor_toolkit!(sleep_processing)

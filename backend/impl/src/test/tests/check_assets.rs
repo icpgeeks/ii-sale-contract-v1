@@ -67,10 +67,10 @@ fn ht_get_identity_principals_from_fetching_assets() -> Vec<Principal> {
     })
 }
 
-/// Advances the state machine one tick at a time (up to 10 ticks) until it lands in
+/// Advances the state machine one tick at a time (up to 12 ticks) until it lands in
 /// `HoldingState::Unsellable`. Panics if `Unsellable` is not reached within the budget.
 async fn tick_until_unsellable() {
-    for _ in 0..10 {
+    for _ in 0..12 {
         super::tick().await;
         let done = get_holder_model(|_, model| {
             matches!(
@@ -84,7 +84,7 @@ async fn tick_until_unsellable() {
             return;
         }
     }
-    panic!("tick_until_unsellable: Unsellable state not reached within 10 ticks");
+    panic!("tick_until_unsellable: Unsellable state not reached within 12 ticks");
 }
 
 // ---------------------------------------------------------------------------

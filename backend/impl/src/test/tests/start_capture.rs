@@ -33,8 +33,9 @@ use crate::{
         ht_get_test_deployer, ht_get_test_hub_canister,
         support::mocks::{
             mock_accounts_for_principal_check_empty, mock_authn_method_registration_mode_exit_ok,
-            mock_email_recovery_remove_ok, mock_identity_info_ok_with_email_recovery,
-            mock_prepare_account_delegation_for_check,
+            mock_email_recovery_remove_ok, mock_identity_info_ok,
+            mock_identity_info_ok_with_email_recovery, mock_mcp_get_config_enabled,
+            mock_mcp_set_config_ok, mock_prepare_account_delegation_for_check,
         },
         HT_CAPTURED_IDENTITY_NUMBER, HT_SALE_DEAL_SAFE_CLOSE_DURATION, HT_STANDARD_CERT_EXPIRATION,
         TEST_CAPTURE_HOSTNAME,
@@ -349,4 +350,63 @@ async fn test_capture_deletes_email_recovery() {
             ..
         },
     } if email_recovery_addresses.is_empty());
+}
+
+#[tokio::test]
+async fn test_capture_disables_mcp_access() {
+    ht_holder_authn_method_registration(
+        HT_STANDARD_CERT_EXPIRATION,
+        ht_get_test_deployer(),
+        HT_CAPTURED_IDENTITY_NUMBER,
+    )
+    .await;
+
+    ht_advance_to_exit_authn_method_registration().await;
+
+    mock_authn_method_registration_mode_exit_ok();
+    super::tick().await;
+
+    mock_accounts_for_principal_check_empty();
+    super::tick().await;
+
+    mock_prepare_account_delegation_for_check(ht_get_test_hub_canister().as_slice().to_vec());
+    super::tick().await;
+    super::tick().await;
+
+    mock_identity_info_ok(vec![AuthnMethodData {
+        security_settings: AuthnMethodSecuritySettings {
+            protection: AuthnMethodProtection::Unprotected,
+            purpose: AuthnMethodPurpose::Authentication,
+        },
+        metadata: Box::new(MetadataMapV2(vec![])),
+        last_authentication: None,
+        authn_method: AuthnMethod::WebAuthn(WebAuthn {
+            pubkey: uncompressed_public_key_to_asn1_block(
+                secp256k1::PublicKey::from_slice(&PUBLIC_KEY)
+                    .unwrap()
+                    .serialize_uncompressed(),
+            )
+            .into(),
+            credential_id: vec![1, 2, 4].into(),
+        }),
+    }]);
+    super::tick().await;
+
+    test_state_matches!(HolderState::Capture {
+        sub_state: CaptureState::ObtainingIdentityMcpConfig,
+    });
+
+    mock_mcp_get_config_enabled("https://mcp.id.ai/mcp");
+    super::tick().await;
+
+    test_state_matches!(HolderState::Capture {
+        sub_state: CaptureState::DisablingIdentityMcpConfig,
+    });
+
+    mock_mcp_set_config_ok();
+    super::tick().await;
+
+    test_state_matches!(HolderState::Capture {
+        sub_state: CaptureState::FinishCapture,
+    });
 }
