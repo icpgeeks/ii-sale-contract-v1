@@ -88,20 +88,9 @@ const getCaptureStepContextFrom = (step: CaptureStep | undefined): StepContext =
                 items[current].icon = <LoadingIconWithProgress />;
                 break;
             }
-            case 'removingMcpAccess': {
+            case 'removingMcpAccess':
+            case 'finishCapture': {
                 current = 2;
-
-                if (step.accountsLeft > 0) {
-                    items[current].title = (
-                        <div>
-                            <span>{i18.holder.state.capture.finalizingCapture.removingMcpAccess.simple}</span>{' '}
-                            <span className="gf-font-size-small">
-                                {i18.holder.state.capture.finalizingCapture.removingMcpAccess.detailed(step.accountsLeft)}
-                            </span>
-                        </div>
-                    );
-                }
-
                 items[current].icon = <LoadingIconWithProgress />;
                 break;
             }

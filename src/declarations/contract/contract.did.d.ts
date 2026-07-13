@@ -1,5 +1,6 @@
 import type { Principal } from '@dfinity/principal';
 import type { ActorMethod } from '@dfinity/agent';
+import type { IDL } from '@dfinity/candid';
 
 export interface AcceptBuyerOfferArgs {
   'offer_amount' : bigint,
@@ -34,7 +35,7 @@ export type AcceptSellerOfferResponse = { 'Ok' : ProcessHolderResult } |
   { 'Err' : AcceptSellerOfferError };
 export interface AccountInformation {
   'balance' : [] | [Timestamped_2],
-  'account_identifier' : Uint8Array,
+  'account_identifier' : Uint8Array | number[],
 }
 export interface AccountsInformation {
   'principal' : Principal,
@@ -112,7 +113,7 @@ export interface CanisterStatusResult {
   'settings' : DefiniteCanisterSettings,
   'query_stats' : QueryStats,
   'idle_cycles_burned_per_day' : bigint,
-  'module_hash' : [] | [Uint8Array],
+  'module_hash' : [] | [Uint8Array | number[]],
   'reserved_cycles' : bigint,
 }
 export type CanisterStatusType = { 'stopped' : null } |
@@ -133,7 +134,7 @@ export type CaptureProcessingEvent = { 'HolderAuthnMethodRegistered' : null } |
   { 'GetHolderContractPrincipalUnauthorized' : null } |
   {
     'IdentityAuthnMethodProtected' : {
-      'public_key' : Uint8Array,
+      'public_key' : Uint8Array | number[],
       'meta_data' : Array<[string, string]>,
     }
   } |
@@ -154,7 +155,7 @@ export type CaptureProcessingEvent = { 'HolderAuthnMethodRegistered' : null } |
   { 'IdentityAuthnMethodsPartiallyDeleted' : null } |
   { 'AuthnMethodSessionRegisterError' : { 'error' : CaptureError } } |
   { 'IdentityMcpConfigObtained' : null } |
-  { 'EcdsaKeyCreated' : { 'ecdsa_key' : Uint8Array } } |
+  { 'EcdsaKeyCreated' : { 'ecdsa_key' : Uint8Array | number[] } } |
   {
     'AuthnMethodSessionRegistered' : {
       'confirmation_code' : string,
@@ -167,7 +168,7 @@ export type CaptureProcessingEvent = { 'HolderAuthnMethodRegistered' : null } |
   { 'IdentityMcpCleanupCompleted' : null } |
   {
     'IdentityAuthnMethodsObtained' : {
-      'authn_pubkeys' : Array<Uint8Array>,
+      'authn_pubkeys' : Array<Uint8Array | number[]>,
       'email_recovery_addresses' : Array<string>,
       'active_registration' : boolean,
       'openid_credentials' : [] | [Array<[string, string, string]>],
@@ -177,7 +178,7 @@ export type CaptureProcessingEvent = { 'HolderAuthnMethodRegistered' : null } |
   { 'IdentityMcpCleanupResync' : null } |
   { 'IdentityAPIChangeDetected' : null } |
   { 'HolderAuthnMethodRegisterError' : { 'error' : CaptureError } } |
-  { 'IdentityAuthnMethodDeleted' : { 'public_key' : Uint8Array } } |
+  { 'IdentityAuthnMethodDeleted' : { 'public_key' : Uint8Array | number[] } } |
   {
     'AccountPrincipalChecked' : {
       'principal' : Principal,
@@ -211,7 +212,7 @@ export type CaptureState = { 'CaptureFailed' : { 'error' : CaptureError } } |
   } |
   {
     'DeletingIdentityAuthnMethods' : {
-      'authn_pubkeys' : Array<Uint8Array>,
+      'authn_pubkeys' : Array<Uint8Array | number[]>,
       'email_recovery_addresses' : Array<string>,
       'active_registration' : boolean,
       'openid_credentials' : [] | [Array<[string, string, string]>],
@@ -226,7 +227,7 @@ export type CaptureState = { 'CaptureFailed' : { 'error' : CaptureError } } |
   { 'StartCapture' : null } |
   {
     'NeedDeleteProtectedIdentityAuthnMethod' : {
-      'public_key' : Uint8Array,
+      'public_key' : Uint8Array | number[],
       'meta_data' : Array<[string, string]>,
     }
   };
@@ -245,27 +246,27 @@ export type CheckApprovedBalanceError = { 'InsufficientAllowance' : null } |
 export type CheckAssetsEvent = {
     'CheckAccountsAdvance' : {
       'principal' : Principal,
-      'sub_account' : Uint8Array,
+      'sub_account' : Uint8Array | number[],
     }
   } |
   { 'CheckAssetsFinished' : null } |
   {
     'AccountHasApprove' : {
       'principal' : Principal,
-      'sub_account' : Uint8Array,
+      'sub_account' : Uint8Array | number[],
     }
   } |
   { 'CheckAssetsStarted' : null } |
   {
     'CheckAccountsPrepared' : {
-      'sub_accounts' : Array<[Principal, Uint8Array]>,
+      'sub_accounts' : Array<[Principal, Uint8Array | number[]]>,
     }
   };
 export type CheckAssetsState = { 'CheckAccountsForNoApprovePrepare' : null } |
   { 'FinishCheckAssets' : null } |
   {
     'CheckAccountsForNoApproveSequential' : {
-      'sub_accounts' : Array<[Principal, Uint8Array]>,
+      'sub_accounts' : Array<[Principal, Uint8Array | number[]]>,
     }
   } |
   { 'StartCheckAssets' : null };
@@ -312,8 +313,8 @@ export interface DefiniteCanisterSettings {
 }
 export interface DelayedTimestampMillis { 'time' : bigint, 'delay' : bigint }
 export interface DelegationData {
-  'signature' : [] | [Uint8Array],
-  'public_key' : Uint8Array,
+  'signature' : [] | [Uint8Array | number[]],
+  'public_key' : Uint8Array | number[],
   'hostname' : string,
   'timestamp' : bigint,
 }
@@ -343,7 +344,9 @@ export type FetchAssetsEvent = {
       'neuron_id' : bigint,
     }
   } |
-  { 'NeuronsInformationGotEmpty' : { 'neuron_ids' : BigUint64Array } } |
+  {
+    'NeuronsInformationGotEmpty' : { 'neuron_ids' : BigUint64Array | bigint[] }
+  } |
   {
     'NeuronHotkeyDeletionVerifyStarted' : {
       'hot_key' : Principal,
@@ -356,7 +359,7 @@ export type FetchAssetsEvent = {
       'accounts' : Array<[[] | [bigint], [] | [string]]>,
     }
   } |
-  { 'NeuronsIdsGot' : { 'neuron_ids' : BigUint64Array } } |
+  { 'NeuronsIdsGot' : { 'neuron_ids' : BigUint64Array | bigint[] } } |
   {
     'NeuronHotkeyVerifiedAbsent' : {
       'hot_key' : Principal,
@@ -374,7 +377,7 @@ export type FetchAssetsEvent = {
   {
     'AccountBalanceObtained' : {
       'balance' : bigint,
-      'account_identifier' : Uint8Array,
+      'account_identifier' : Uint8Array | number[],
     }
   } |
   { 'TooManyAccounts' : null } |
@@ -552,7 +555,7 @@ export type HoldingState = {
 export interface HttpHeader { 'value' : string, 'name' : string }
 export interface HttpRequestResult {
   'status' : bigint,
-  'body' : Uint8Array,
+  'body' : Uint8Array | number[],
   'headers' : Array<HttpHeader>,
 }
 export interface IdentifiedHolderProcessingEvent {
@@ -569,13 +572,16 @@ export interface IdentityAccountNnsAssets {
 export type IdentityEventsSortingKey = { 'Created' : null };
 export interface InitContractArgs {
   'certificate' : SignedContractCertificate,
-  'contract_activation_code_hash' : [] | [Uint8Array],
-  'root_public_key_raw' : Uint8Array,
+  'contract_activation_code_hash' : [] | [Uint8Array | number[]],
+  'root_public_key_raw' : Uint8Array | number[],
 }
 export type LedgerAccount = {
-    'Account' : { 'owner' : Principal, 'subaccount' : [] | [Uint8Array] }
+    'Account' : {
+      'owner' : Principal,
+      'subaccount' : [] | [Uint8Array | number[]],
+    }
   } |
-  { 'AccountIdentifier' : { 'slice' : Uint8Array } };
+  { 'AccountIdentifier' : { 'slice' : Uint8Array | number[] } };
 export type LimitFailureReason = { 'TooManyNeurons' : null } |
   { 'TooManyAccounts' : null };
 export type LogVisibility = { 'controllers' : null } |
@@ -609,7 +615,7 @@ export interface NeuronInformation {
   'created_timestamp_seconds' : bigint,
   'auto_stake_maturity' : [] | [boolean],
   'aging_since_timestamp_seconds' : bigint,
-  'account' : Uint8Array,
+  'account' : Uint8Array | number[],
   'joined_community_fund_timestamp_seconds' : [] | [bigint],
   'eight_year_gang_bonus_base_e8s' : [] | [bigint],
   'neuron_information_extended' : [] | [NeuronInformationExtended],
@@ -640,7 +646,7 @@ export interface ProcessHolderResult {
   'holder_information' : HolderInformation,
 }
 export interface QueryCanisterSignedRequest {
-  'request_sign' : Uint8Array,
+  'request_sign' : Uint8Array | number[],
   'canister_id' : Principal,
 }
 export interface QueryStats {
@@ -650,7 +656,7 @@ export interface QueryStats {
   'request_payload_bytes_total' : bigint,
 }
 export interface ReceiveDelegationArgs {
-  'get_delegation_response' : Uint8Array,
+  'get_delegation_response' : Uint8Array | number[],
 }
 export type ReceiveDelegationError = {
     'ResponseNotContainsDelegation' : null
@@ -849,7 +855,7 @@ export type SetSaleOfferError = { 'HigherBuyerOfferExists' : null } |
 export type SetSaleOfferResponse = { 'Ok' : ProcessHolderResult } |
   { 'Err' : SetSaleOfferError };
 export interface SignedContractCertificate {
-  'signature' : Uint8Array,
+  'signature' : Uint8Array | number[],
   'contract_certificate' : ContractCertificate,
 }
 export interface SortingDefinition {
@@ -868,7 +874,7 @@ export type StartCaptureIdentityResponse = { 'Ok' : ProcessHolderResult } |
 export interface SubAccountInformation {
   'sub_account_information' : AccountInformation,
   'name' : string,
-  'sub_account' : Uint8Array,
+  'sub_account' : Uint8Array | number[],
 }
 export interface Timestamped {
   'value' : NeuronInformation,
@@ -895,92 +901,97 @@ export interface TransferInformation {
   'amount' : bigint,
 }
 export interface TransformArgs {
-  'context' : Uint8Array,
+  'context' : Uint8Array | number[],
   'response' : HttpRequestResult,
 }
 export type UnsellableReason = { 'ValidationFailed' : { 'reason' : string } } |
   { 'CertificateExpired' : null } |
   { 'CheckLimitFailed' : { 'reason' : LimitFailureReason } } |
   {
-    'ApproveOnAccount' : { 'principal' : Principal, 'sub_account' : Uint8Array }
+    'ApproveOnAccount' : {
+      'principal' : Principal,
+      'sub_account' : Uint8Array | number[],
+    }
   } |
   { 'SaleDealCompleted' : null };
 export interface _SERVICE {
   'accept_buyer_offer' : ActorMethod<
     [AcceptBuyerOfferArgs],
-    AcceptBuyerOfferResponse,
+    AcceptBuyerOfferResponse
   >,
   'accept_seller_offer' : ActorMethod<
     [AcceptSellerOfferArgs],
-    AcceptSellerOfferResponse,
+    AcceptSellerOfferResponse
   >,
   'activate_contract' : ActorMethod<
     [ActivateContractArgs],
-    ActivateContractResponse,
+    ActivateContractResponse
   >,
   'add_contract_controller' : ActorMethod<
     [AddContractControllerArgs],
-    AddContractControllerResponse,
+    AddContractControllerResponse
   >,
   'cancel_buyer_offer' : ActorMethod<[{}], CancelBuyerOfferResponse>,
   'cancel_capture_identity' : ActorMethod<[{}], CancelCaptureIdentityResponse>,
   'cancel_sale_intention' : ActorMethod<[{}], CancelSaleIntentionResponse>,
   'change_sale_intention' : ActorMethod<
     [ChangeSaleIntentionArgs],
-    ChangeSaleIntentionResponse,
+    ChangeSaleIntentionResponse
   >,
   'confirm_holder_authn_method_registration' : ActorMethod<
     [ConfirmHolderAuthnMethodRegistrationArgs],
-    CancelSaleIntentionResponse,
+    CancelSaleIntentionResponse
   >,
   'confirm_owner_authn_method_registration' : ActorMethod<
     [ConfirmOwnerAuthnMethodRegistrationArgs],
-    CancelSaleIntentionResponse,
+    CancelSaleIntentionResponse
   >,
   'delete_holder_authn_method' : ActorMethod<[{}], CancelSaleIntentionResponse>,
   'get_canister_metrics' : ActorMethod<[{}], GetCanisterMetricsResponse>,
   'get_canister_status' : ActorMethod<[], GetCanisterStatusResponse>,
   'get_contract_certificate' : ActorMethod<
     [{}],
-    GetContractCertificateResponse,
+    GetContractCertificateResponse
   >,
   'get_contract_owner' : ActorMethod<[{}], GetContractOwnerResponse>,
   'get_holder_events' : ActorMethod<
     [GetHolderEventsArgs],
-    GeHolderEventsResponse,
+    GeHolderEventsResponse
   >,
   'get_holder_information' : ActorMethod<[{}], GetHolderInformationResponse>,
   'get_holder_information_query' : ActorMethod<
     [{}],
-    GetHolderInformationResponse,
+    GetHolderInformationResponse
   >,
   'process_holder' : ActorMethod<[{}], ProcessHolderResponse>,
   'protected_authn_method_deleted' : ActorMethod<
     [{}],
-    CancelSaleIntentionResponse,
+    CancelSaleIntentionResponse
   >,
   'receive_delegation' : ActorMethod<
     [ReceiveDelegationArgs],
-    ReceiveDelegationResponse,
+    ReceiveDelegationResponse
   >,
   'restart_release_identity' : ActorMethod<
     [RestartReleaseIdentityArgs],
-    CancelSaleIntentionResponse,
+    CancelSaleIntentionResponse
   >,
   'retry_prepare_delegation' : ActorMethod<
     [{}],
-    RetryPrepareDelegationResponse,
+    RetryPrepareDelegationResponse
   >,
   'set_buyer_offer' : ActorMethod<[SetBuyerOfferArgs], SetBuyerOfferResponse>,
   'set_sale_intention' : ActorMethod<
     [SetSaleIntentionArgs],
-    SetSaleIntentionResponse,
+    SetSaleIntentionResponse
   >,
   'set_sale_offer' : ActorMethod<[SetSaleOfferArgs], SetSaleOfferResponse>,
   'start_capture_identity' : ActorMethod<
     [StartCaptureIdentityArgs],
-    StartCaptureIdentityResponse,
+    StartCaptureIdentityResponse
   >,
   'start_release_identity' : ActorMethod<[{}], CancelSaleIntentionResponse>,
   'transform_http_response' : ActorMethod<[TransformArgs], HttpRequestResult>,
 }
+export declare const idlFactory: IDL.InterfaceFactory;
+export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

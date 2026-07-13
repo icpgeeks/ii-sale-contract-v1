@@ -33,6 +33,8 @@ export const useOwnerCanCancelCapture = (): Result => {
             }
             case 'ObtainingIdentityAuthnMethods':
             case 'DeletingIdentityAuthnMethods':
+            case 'DisablingIdentityMcpConfig':
+            case 'ObtainingIdentityMcpConfig':
             case 'FinishCapture':
             case 'GetHolderContractAccounts':
             case 'CheckHolderContractPrincipals':

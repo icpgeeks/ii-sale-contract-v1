@@ -453,9 +453,7 @@ This description does not cover all possible risks, limitations, or edge cases. 
                         detailed: (passkeysLeft: number) => `(${passkeysLeft} ${passkeysLeft == 1 ? 'passkey' : 'passkeys'} left)`
                     },
                     removingMcpAccess: {
-                        simple: 'Removing MCP access',
-                        detailed: (accountsLeft: number) =>
-                            `(${accountsLeft} ${accountsLeft == 1 ? 'account' : 'accounts'} left)`
+                        simple: 'Removing MCP server'
                     }
                 }
             },

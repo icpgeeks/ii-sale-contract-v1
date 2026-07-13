@@ -11,6 +11,7 @@ type CaptureStepType =
     | 'protectedDeviceDetected'
     | 'removingDevices'
     | 'removingMcpAccess'
+    | 'finishCapture'
     | 'n/a';
 
 type CaptureStepProto<T extends CaptureStepType> = {
@@ -21,15 +22,16 @@ type CaptureStepRemovingDevices = CaptureStepProto<'removingDevices'> & {
     passkeysLeft: number;
 };
 
-type CaptureStepRemovingMcpAccess = CaptureStepProto<'removingMcpAccess'> & {
-    accountsLeft: number;
-};
+type CaptureStepRemovingMcpAccess = CaptureStepProto<'removingMcpAccess'>
+
+type CaptureStepFinishCapture = CaptureStepProto<'finishCapture'>
 
 export type CaptureStep =
     | CaptureStepProto<'verifyingPrincipal'>
     | CaptureStepProto<'protectedDeviceDetected'>
     | CaptureStepRemovingDevices
     | CaptureStepRemovingMcpAccess
+    | CaptureStepFinishCapture
     | CaptureStepProto<'n/a'>;
 
 type Context = {
@@ -103,11 +105,15 @@ const getStepFromCaptureState = (subState: CaptureState): CaptureStep => {
             return result;
         }
         case 'ObtainingIdentityMcpConfig':
-        case 'DisablingIdentityMcpConfig':
-        case 'FinishCapture': {
+        case 'DisablingIdentityMcpConfig': {
             const result: CaptureStepRemovingMcpAccess = {
                 type: 'removingMcpAccess',
-                accountsLeft: captureSubStateType === 'DisablingIdentityMcpConfig' ? 1 : 0
+            };
+            return result;
+        }
+        case 'FinishCapture': {
+            const result: CaptureStepFinishCapture = {
+                type: 'finishCapture'
             };
             return result;
         }
