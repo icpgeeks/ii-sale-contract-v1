@@ -219,6 +219,8 @@ export const idlFactory = ({ IDL }) => {
   const CaptureState = IDL.Variant({
     'CaptureFailed' : IDL.Record({ 'error' : CaptureError }),
     'CreateEcdsaKey' : IDL.Null,
+    'DisablingIdentityMcpConfig' : IDL.Null,
+    'ObtainingIdentityMcpConfig' : IDL.Null,
     'GetHolderContractAccounts' : ConfirmHolderAuthnMethodRegistrationArgs,
     'NeedConfirmAuthnMethodSessionRegistration' : IDL.Record({
       'confirmation_code' : IDL.Text,
@@ -643,6 +645,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const CaptureProcessingEvent = IDL.Variant({
     'HolderAuthnMethodRegistered' : IDL.Null,
+    'IdentityMcpCleanupSkipped' : IDL.Null,
     'AuthnMethodSessionRegistrationConfirmed' : ConfirmHolderAuthnMethodRegistrationArgs,
     'GetHolderContractPrincipalUnauthorized' : IDL.Null,
     'IdentityAuthnMethodProtected' : IDL.Record({
@@ -661,6 +664,7 @@ export const idlFactory = ({ IDL }) => {
     'ProtectedIdentityAuthnMethodDeleted' : IDL.Null,
     'IdentityAuthnMethodsPartiallyDeleted' : IDL.Null,
     'AuthnMethodSessionRegisterError' : IDL.Record({ 'error' : CaptureError }),
+    'IdentityMcpConfigObtained' : IDL.Null,
     'EcdsaKeyCreated' : IDL.Record({ 'ecdsa_key' : IDL.Vec(IDL.Nat8) }),
     'AuthnMethodSessionRegistered' : IDL.Record({
       'confirmation_code' : IDL.Text,
@@ -669,6 +673,7 @@ export const idlFactory = ({ IDL }) => {
     'HolderAuthnMethodLost' : IDL.Null,
     'AuthnMethodSessionRegistrationExpired' : IDL.Null,
     'CancelCapture' : IDL.Null,
+    'IdentityMcpCleanupCompleted' : IDL.Null,
     'IdentityAuthnMethodsObtained' : IDL.Record({
       'authn_pubkeys' : IDL.Vec(IDL.Vec(IDL.Nat8)),
       'email_recovery_addresses' : IDL.Vec(IDL.Text),
@@ -678,6 +683,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     }),
     'HolderContractPrincipalCheckPassed' : IDL.Null,
+    'IdentityMcpCleanupResync' : IDL.Null,
     'IdentityAPIChangeDetected' : IDL.Null,
     'HolderAuthnMethodRegisterError' : IDL.Record({ 'error' : CaptureError }),
     'IdentityAuthnMethodDeleted' : IDL.Record({

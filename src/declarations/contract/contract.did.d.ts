@@ -127,6 +127,7 @@ export type CaptureError = { 'SessionRegistrationAlreadyInProgress' : null } |
   { 'InvalidMetadata' : string } |
   { 'HolderDeviceLost' : null };
 export type CaptureProcessingEvent = { 'HolderAuthnMethodRegistered' : null } |
+  { 'IdentityMcpCleanupSkipped' : null } |
   {
     'AuthnMethodSessionRegistrationConfirmed' : ConfirmHolderAuthnMethodRegistrationArgs
   } |
@@ -153,6 +154,7 @@ export type CaptureProcessingEvent = { 'HolderAuthnMethodRegistered' : null } |
   { 'ProtectedIdentityAuthnMethodDeleted' : null } |
   { 'IdentityAuthnMethodsPartiallyDeleted' : null } |
   { 'AuthnMethodSessionRegisterError' : { 'error' : CaptureError } } |
+  { 'IdentityMcpConfigObtained' : null } |
   { 'EcdsaKeyCreated' : { 'ecdsa_key' : Uint8Array | number[] } } |
   {
     'AuthnMethodSessionRegistered' : {
@@ -163,6 +165,7 @@ export type CaptureProcessingEvent = { 'HolderAuthnMethodRegistered' : null } |
   { 'HolderAuthnMethodLost' : null } |
   { 'AuthnMethodSessionRegistrationExpired' : null } |
   { 'CancelCapture' : null } |
+  { 'IdentityMcpCleanupCompleted' : null } |
   {
     'IdentityAuthnMethodsObtained' : {
       'authn_pubkeys' : Array<Uint8Array | number[]>,
@@ -172,6 +175,7 @@ export type CaptureProcessingEvent = { 'HolderAuthnMethodRegistered' : null } |
     }
   } |
   { 'HolderContractPrincipalCheckPassed' : null } |
+  { 'IdentityMcpCleanupResync' : null } |
   { 'IdentityAPIChangeDetected' : null } |
   { 'HolderAuthnMethodRegisterError' : { 'error' : CaptureError } } |
   { 'IdentityAuthnMethodDeleted' : { 'public_key' : Uint8Array | number[] } } |
@@ -191,6 +195,8 @@ export type CaptureProcessingEvent = { 'HolderAuthnMethodRegistered' : null } |
   { 'CaptureStarted' : null };
 export type CaptureState = { 'CaptureFailed' : { 'error' : CaptureError } } |
   { 'CreateEcdsaKey' : null } |
+  { 'DisablingIdentityMcpConfig' : null } |
+  { 'ObtainingIdentityMcpConfig' : null } |
   { 'GetHolderContractAccounts' : ConfirmHolderAuthnMethodRegistrationArgs } |
   {
     'NeedConfirmAuthnMethodSessionRegistration' : {

@@ -6,7 +6,13 @@ import {getSingleEntryUnion} from 'frontend/src/utils/core/typescript/typescript
 import {createContext, useContext, useMemo, type PropsWithChildren} from 'react';
 import type {CaptureState} from 'src/declarations/contract/contract.did';
 
-type CaptureStepType = 'verifyingPrincipal' | 'protectedDeviceDetected' | 'removingDevices' | 'n/a';
+type CaptureStepType =
+    | 'verifyingPrincipal'
+    | 'protectedDeviceDetected'
+    | 'removingDevices'
+    | 'removingMcpAccess'
+    | 'finishCapture'
+    | 'n/a';
 
 type CaptureStepProto<T extends CaptureStepType> = {
     type: T;
@@ -16,7 +22,17 @@ type CaptureStepRemovingDevices = CaptureStepProto<'removingDevices'> & {
     passkeysLeft: number;
 };
 
-export type CaptureStep = CaptureStepProto<'verifyingPrincipal'> | CaptureStepProto<'protectedDeviceDetected'> | CaptureStepRemovingDevices | CaptureStepProto<'n/a'>;
+type CaptureStepRemovingMcpAccess = CaptureStepProto<'removingMcpAccess'>
+
+type CaptureStepFinishCapture = CaptureStepProto<'finishCapture'>
+
+export type CaptureStep =
+    | CaptureStepProto<'verifyingPrincipal'>
+    | CaptureStepProto<'protectedDeviceDetected'>
+    | CaptureStepRemovingDevices
+    | CaptureStepRemovingMcpAccess
+    | CaptureStepFinishCapture
+    | CaptureStepProto<'n/a'>;
 
 type Context = {
     step?: CaptureStep;
@@ -75,8 +91,7 @@ const getStepFromCaptureState = (subState: CaptureState): CaptureStep => {
             return {type: 'protectedDeviceDetected'};
         }
         case 'ObtainingIdentityAuthnMethods':
-        case 'DeletingIdentityAuthnMethods':
-        case 'FinishCapture': {
+        case 'DeletingIdentityAuthnMethods': {
             const result: CaptureStepRemovingDevices = {
                 type: 'removingDevices',
                 passkeysLeft: 0
@@ -87,6 +102,19 @@ const getStepFromCaptureState = (subState: CaptureState): CaptureStep => {
                 const numberOfEmailRecoveryAddresses = union.state.email_recovery_addresses.length;
                 result.passkeysLeft = numberOfAuthnPubkeys + numberOfOpenIdCredentials + numberOfEmailRecoveryAddresses;
             }
+            return result;
+        }
+        case 'ObtainingIdentityMcpConfig':
+        case 'DisablingIdentityMcpConfig': {
+            const result: CaptureStepRemovingMcpAccess = {
+                type: 'removingMcpAccess',
+            };
+            return result;
+        }
+        case 'FinishCapture': {
+            const result: CaptureStepFinishCapture = {
+                type: 'finishCapture'
+            };
             return result;
         }
         default: {

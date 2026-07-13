@@ -6,8 +6,8 @@ use common_canister_impl::components::{
         AuthnMethodRegisterRet, AuthnMethodRegistrationModeEnterRet,
         AuthnMethodRegistrationModeExitError, AuthnMethodRegistrationModeExitRet,
         AuthnMethodRemoveRet, EmailRecoveryCredential, EmailRecoveryCredentialRemoveRet,
-        GetAccountsError, IdentityInfo, IdentityInfoRet, MetadataMapV2, PrepareAccountDelegation,
-        PrepareAccountDelegationRet,
+        GetAccountsError, IdentityInfo, IdentityInfoRet, McpConfig, McpSetConfigRet, MetadataMapV2,
+        PrepareAccountDelegation, PrepareAccountDelegationRet,
     },
     nns::api::ListNeuronsResponse,
     nns_dap::api::{AccountDetails, GetAccountResponse},
@@ -226,6 +226,37 @@ pub(crate) fn mock_authn_method_registration_mode_exit_ret_err(
     error: AuthnMethodRegistrationModeExitError,
 ) {
     set_test_ic_agent_response(Encode!(&AuthnMethodRegistrationModeExitRet::Err(error)).unwrap());
+}
+
+// ---------------------------------------------------------------------------
+// MCP
+// ---------------------------------------------------------------------------
+
+/// Mocks IC agent response: MCP is disabled (default config).
+pub(crate) fn mock_mcp_get_config_disabled() {
+    set_test_ic_agent_response(
+        Encode!(&McpConfig {
+            enabled: false,
+            url: None,
+        })
+        .unwrap(),
+    );
+}
+
+/// Mocks IC agent response: MCP is enabled with the given trusted server URL.
+pub(crate) fn mock_mcp_get_config_enabled(url: &str) {
+    set_test_ic_agent_response(
+        Encode!(&McpConfig {
+            enabled: true,
+            url: Some(url.to_string()),
+        })
+        .unwrap(),
+    );
+}
+
+/// Mocks IC agent response: MCP config disabled and session grant revoked.
+pub(crate) fn mock_mcp_set_config_ok() {
+    set_test_ic_agent_response(Encode!(&McpSetConfigRet::Ok).unwrap());
 }
 
 // ---------------------------------------------------------------------------

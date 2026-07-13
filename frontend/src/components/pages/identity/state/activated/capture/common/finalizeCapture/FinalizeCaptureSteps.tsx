@@ -44,7 +44,8 @@ type StepContext = {
 export const getCaptureStepProps = (): Array<StepProps> => {
     return [
         {title: i18.holder.state.capture.finalizingCapture.verifyingInternetIdentity, status: undefined},
-        {title: i18.holder.state.capture.finalizingCapture.removingPasskeys.simple, status: undefined}
+        {title: i18.holder.state.capture.finalizingCapture.removingPasskeys.simple, status: undefined},
+        {title: i18.holder.state.capture.finalizingCapture.removingMcpAccess.simple, status: undefined}
     ];
 };
 
@@ -84,6 +85,12 @@ const getCaptureStepContextFrom = (step: CaptureStep | undefined): StepContext =
                     );
                 }
 
+                items[current].icon = <LoadingIconWithProgress />;
+                break;
+            }
+            case 'removingMcpAccess':
+            case 'finishCapture': {
+                current = 2;
                 items[current].icon = <LoadingIconWithProgress />;
                 break;
             }

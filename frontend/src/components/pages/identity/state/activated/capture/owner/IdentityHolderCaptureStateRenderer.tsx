@@ -7,6 +7,7 @@ import {CaptureFailedPage} from './subState/captureFailed/CaptureFailedPage';
 import {CheckHolderContractPrincipalsPanel} from './subState/checkHolderContractPrincipals/CheckHolderContractPrincipalsPanel';
 import {CreateEcdsaKeyPanel} from './subState/createEcdsaKey/CreateEcdsaKeyPanel';
 import {DeletingIdentityAuthnMethodsPanel} from './subState/deletingIdentityAuthnMethods/DeletingIdentityAuthnMethodsPanel';
+import {DisablingIdentityMcpConfigPanel} from './subState/disablingIdentityMcpConfig/DisablingIdentityMcpConfigPanel';
 import {ExitAndRegisterHolderAuthnMethodPage} from './subState/exitAndRegisterHolderAuthnMethod/ExitAndRegisterHolderAuthnMethodPage';
 import {FinishCapturePanel} from './subState/finishCapture/FinishCapturePanel';
 import {GetHolderContractAccountsPanel} from './subState/getHolderContractAccounts/GetHolderContractAccountsPanel';
@@ -47,6 +48,8 @@ const pages: Record<HolderCaptureSubStateUnionType, ComponentType> = {
     ObtainingIdentityAuthnMethods: memo(DeletingIdentityAuthnMethodsPanel),
     DeletingIdentityAuthnMethods: memo(DeletingIdentityAuthnMethodsPanel),
     NeedDeleteProtectedIdentityAuthnMethod: memo(NeedDeleteProtectedIdentityAuthnMethodPage),
+    ObtainingIdentityMcpConfig: memo(DisablingIdentityMcpConfigPanel),
+    DisablingIdentityMcpConfig: memo(DisablingIdentityMcpConfigPanel),
     FinishCapture: memo(FinishCapturePanel),
     CaptureFailed: memo(CaptureFailedPage)
 };

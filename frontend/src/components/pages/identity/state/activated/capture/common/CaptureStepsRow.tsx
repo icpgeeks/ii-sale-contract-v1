@@ -36,6 +36,8 @@ export const CaptureStepsRow = () => {
             case 'ObtainingIdentityAuthnMethods':
             case 'DeletingIdentityAuthnMethods':
             case 'NeedDeleteProtectedIdentityAuthnMethod':
+            case 'DisablingIdentityMcpConfig':
+            case 'ObtainingIdentityMcpConfig':
             case 'FinishCapture': {
                 return 3;
             }

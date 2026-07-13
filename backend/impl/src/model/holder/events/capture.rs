@@ -408,7 +408,42 @@ pub(crate) fn handle_capture_event(
                 }
             );
             model.identity_name = identity_name.clone();
+            update_capture_state(model, time, CaptureState::ObtainingIdentityMcpConfig);
+            Ok(())
+        }
+        CaptureProcessingEvent::IdentityMcpCleanupResync => {
+            state_matches!(
+                model,
+                HolderState::Capture {
+                    sub_state: CaptureState::DisablingIdentityMcpConfig,
+                    ..
+                }
+            );
+            update_capture_state(model, time, CaptureState::ObtainingIdentityMcpConfig);
+            Ok(())
+        }
+        CaptureProcessingEvent::IdentityMcpCleanupSkipped
+        | CaptureProcessingEvent::IdentityMcpCleanupCompleted => {
+            state_matches!(
+                model,
+                HolderState::Capture {
+                    sub_state: CaptureState::ObtainingIdentityMcpConfig
+                        | CaptureState::DisablingIdentityMcpConfig,
+                    ..
+                }
+            );
             update_capture_state(model, time, CaptureState::FinishCapture);
+            Ok(())
+        }
+        CaptureProcessingEvent::IdentityMcpConfigObtained => {
+            state_matches!(
+                model,
+                HolderState::Capture {
+                    sub_state: CaptureState::ObtainingIdentityMcpConfig,
+                    ..
+                }
+            );
+            update_capture_state(model, time, CaptureState::DisablingIdentityMcpConfig);
             Ok(())
         }
         CaptureProcessingEvent::CaptureFinished => {

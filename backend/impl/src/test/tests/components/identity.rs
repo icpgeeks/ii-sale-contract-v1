@@ -11,8 +11,8 @@ use common_canister_impl::{
             AuthnMethodRegistrationModeExitRet, AuthnMethodRemoveRet,
             EmailRecoveryCredentialRemoveRet, GetAccountDelegationRet, GetAccountsError,
             GetDefaultAccountRet, GetDelegationResponse, IdentityAuthnInfo, IdentityAuthnInfoRet,
-            IdentityInfoRet, OpenidCredentialRemoveRet, PrepareAccountDelegationRet, PublicKey,
-            RegistrationId, UserNumber, WebAuthn,
+            IdentityInfoRet, McpConfig, McpSetConfigRet, OpenidCredentialRemoveRet,
+            PrepareAccountDelegationRet, PublicKey, RegistrationId, UserNumber, WebAuthn,
         },
         interface::Identity,
         interface_impl::IdentityImpl,
@@ -364,6 +364,33 @@ impl Identity for IdentityTest {
         response_data: &[u8],
     ) -> Result<Result<Vec<AccountInfo>, GetAccountsError>, String> {
         self.proxy.decode_get_accounts_response(response_data)
+    }
+
+    fn build_mcp_get_config_request(
+        &self,
+        identity_number: &IdentityNumber,
+    ) -> IcAgentRequestDefinition {
+        self.proxy.build_mcp_get_config_request(identity_number)
+    }
+
+    fn decode_mcp_get_config_response(&self, response_data: &[u8]) -> Result<McpConfig, String> {
+        self.proxy.decode_mcp_get_config_response(response_data)
+    }
+
+    fn build_mcp_set_config_request(
+        &self,
+        identity_number: &IdentityNumber,
+        config: &McpConfig,
+    ) -> IcAgentRequestDefinition {
+        self.proxy
+            .build_mcp_set_config_request(identity_number, config)
+    }
+
+    fn decode_mcp_set_config_response(
+        &self,
+        response_data: &[u8],
+    ) -> Result<McpSetConfigRet, String> {
+        self.proxy.decode_mcp_set_config_response(response_data)
     }
 
     fn get_delegation_signature_msg(

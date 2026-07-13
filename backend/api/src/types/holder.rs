@@ -59,6 +59,8 @@ pub enum CaptureState {
         openid_credentials: Option<Vec<OpenIdCredentialKey>>,
         email_recovery_addresses: Vec<String>,
     },
+    ObtainingIdentityMcpConfig,
+    DisablingIdentityMcpConfig,
     FinishCapture,
     CaptureFailed {
         error: CaptureError,
@@ -376,6 +378,10 @@ pub enum CaptureProcessingEvent {
     IdentityAuthnMethodsDeleted {
         identity_name: Option<String>,
     },
+    IdentityMcpConfigObtained,
+    IdentityMcpCleanupSkipped,
+    IdentityMcpCleanupResync,
+    IdentityMcpCleanupCompleted,
     CaptureFinished,
 }
 
