@@ -1,8 +1,12 @@
-# Internet Identity Sale Contract v1.4
+# Internet Identity Sale Contract v1.5
 
 This single-use smart contract enables trustless sale of an entire Internet Identity along with all linked assets, accounts, permissions, and dapp accesses. It provides key functionality like listing, offers, validation, ownership transfer, and payments. The contract is issued with a cryptographic certificate, which makes it fully immutable for the entire certification period.
 
 ## What's New
+
+### Version 1.5
+
+- Improved security and reliability of Internet Identity transfer flows.
 
 ### Version 1.4
 
@@ -37,7 +41,7 @@ This single-use smart contract enables trustless sale of an entire Internet Iden
 
 - Operates as isolated canister with no shared state and no external controllers once deployed.
 - Receives 100-day certificate providing full immutability while valid.
-- Takes temporary exclusive custody and control of Internet Identity by removing all other passkeys, including seed phrase and recovery email.
+- Takes temporary exclusive custody and control of Internet Identity by removing all other passkeys, including seed phrase, recovery email and MCP server.
 - Removes all neuron hotkeys to eliminate residual control by seller.
 - Detects and displays ICP accounts and neurons from NNS Dapp.
 - Supports Internet Identities with multiple accounts.
