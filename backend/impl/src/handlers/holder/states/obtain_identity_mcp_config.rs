@@ -31,13 +31,19 @@ pub(crate) async fn process(
 
     let response_data = execute_ic_agent_request(env, ic_agent_request).await?;
 
+    // II returns `opt McpConfig`: `None` means the anchor never configured MCP
+    // (Settings treats that the same as switched off).
     let mcp_config = env
         .get_identity()
         .decode_mcp_get_config_response(&response_data)
         .map_err(to_internal_error)?;
 
-    if !mcp_config.enabled {
-        log_info!(env, "Identity MCP config: disabled, cleanup skipped.");
+    let needs_disable = mcp_config.as_ref().is_some_and(|config| config.enabled);
+    if !needs_disable {
+        log_info!(
+            env,
+            "Identity MCP config: absent or disabled, cleanup skipped."
+        );
         update_holder(
             lock,
             HolderProcessingEvent::Capturing {
