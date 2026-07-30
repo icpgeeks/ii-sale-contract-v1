@@ -20,7 +20,7 @@ use crate::test::tests::support::mocks::{
     make_account_info, mock_accounts_for_principal_check, mock_accounts_for_principal_check_empty,
     mock_authn_method_register_err, mock_authn_method_register_ok,
     mock_authn_method_registration_mode_exit_err, mock_authn_method_registration_mode_exit_ok,
-    mock_identity_info_ok, mock_mcp_get_config_disabled, mock_prepare_account_delegation_for_check,
+    mock_identity_info_ok, mock_mcp_get_config_absent, mock_prepare_account_delegation_for_check,
 };
 use crate::{
     handlers::holder::states::get_holder_model,
@@ -306,7 +306,7 @@ async fn test_holder_auth_registration() {
         sub_state: CaptureState::ObtainingIdentityMcpConfig,
     });
 
-    mock_mcp_get_config_disabled();
+    mock_mcp_get_config_absent();
     super::tick().await;
     test_state_matches!(HolderState::Capture {
         sub_state: CaptureState::FinishCapture,
@@ -643,7 +643,7 @@ async fn test_protected_authn_method_deleted() {
         sub_state: CaptureState::ObtainingIdentityMcpConfig,
     });
 
-    mock_mcp_get_config_disabled();
+    mock_mcp_get_config_absent();
     super::tick().await;
     test_state_matches!(HolderState::Capture {
         sub_state: CaptureState::FinishCapture,
