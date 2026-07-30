@@ -58,6 +58,7 @@ pub enum CaptureState {
         active_registration: bool,
         openid_credentials: Option<Vec<OpenIdCredentialKey>>,
         email_recovery_addresses: Vec<String>,
+        verified_email_addresses: Vec<String>,
     },
     ObtainingIdentityMcpConfig,
     DisablingIdentityMcpConfig,
@@ -361,6 +362,7 @@ pub enum CaptureProcessingEvent {
         active_registration: bool,
         openid_credentials: Option<Vec<OpenIdCredentialKey>>,
         email_recovery_addresses: Vec<String>,
+        verified_email_addresses: Vec<String>,
     },
     IdentityAuthnMethodDeleted {
         public_key: Vec<u8>,
@@ -370,6 +372,9 @@ pub enum CaptureProcessingEvent {
         openid_credential_key: OpenIdCredentialKey,
     },
     IdentityEmailRecoveryDeleted {
+        address: String,
+    },
+    IdentityVerifiedEmailDeleted {
         address: String,
     },
     ProtectedIdentityAuthnMethodDeleted,

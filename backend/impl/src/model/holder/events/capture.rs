@@ -286,6 +286,7 @@ pub(crate) fn handle_capture_event(
             active_registration,
             openid_credentials,
             email_recovery_addresses,
+            verified_email_addresses,
         } => {
             state_matches!(
                 model,
@@ -302,6 +303,7 @@ pub(crate) fn handle_capture_event(
                     active_registration: *active_registration,
                     openid_credentials: openid_credentials.clone(),
                     email_recovery_addresses: email_recovery_addresses.clone(),
+                    verified_email_addresses: verified_email_addresses.clone(),
                 },
             );
             Ok(())
@@ -392,6 +394,24 @@ pub(crate) fn handle_capture_event(
                     ..
                 } => {
                     email_recovery_addresses.retain(|stored_address| stored_address != address);
+                }
+                _ => {
+                    return Err(UpdateHolderError::WrongState);
+                }
+            }
+            Ok(())
+        }
+        CaptureProcessingEvent::IdentityVerifiedEmailDeleted { address } => {
+            match &mut model.state.value {
+                HolderState::Capture {
+                    sub_state:
+                        CaptureState::DeletingIdentityAuthnMethods {
+                            verified_email_addresses,
+                            ..
+                        },
+                    ..
+                } => {
+                    verified_email_addresses.retain(|stored_address| stored_address != address);
                 }
                 _ => {
                     return Err(UpdateHolderError::WrongState);

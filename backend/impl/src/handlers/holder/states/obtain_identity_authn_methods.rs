@@ -81,6 +81,21 @@ pub(crate) async fn process(
                 )?;
                 return Ok(ProcessingResult::Continue);
             }
+            if identity_info.verified_emails.is_none()
+                && is_verified_emails_present(&response_data)?
+            {
+                log_error!(
+                    env,
+                    "Identity authn methods: detected identity API change - missing verified_emails",
+                );
+                update_holder(
+                    lock,
+                    HolderProcessingEvent::Capturing {
+                        event: CaptureProcessingEvent::IdentityAPIChangeDetected,
+                    },
+                )?;
+                return Ok(ProcessingResult::Continue);
+            }
             identity_info
         }
         IdentityInfoRet::Err(error) => match error {
@@ -124,6 +139,13 @@ pub(crate) async fn process(
         .map(|credential| credential.address)
         .collect();
 
+    let verified_email_addresses: Vec<String> = identity_info
+        .verified_emails
+        .unwrap_or_default()
+        .into_iter()
+        .map(|credential| credential.address)
+        .collect();
+
     log_info!(
         env,
         "Identity authn methods: auth_pubkeys({}): {:?}",
@@ -161,6 +183,12 @@ pub(crate) async fn process(
         email_recovery_addresses.len(),
         email_recovery_addresses
     );
+    log_info!(
+        env,
+        "Identity authn methods: verified emails({}): {:?}",
+        verified_email_addresses.len(),
+        verified_email_addresses
+    );
 
     if authn_pubkeys.is_empty()
         && identity_info.authn_method_registration.is_none()
@@ -170,8 +198,9 @@ pub(crate) async fn process(
             .filter(|creds| !creds.is_empty())
             .is_none()
         && email_recovery_addresses.is_empty()
+        && verified_email_addresses.is_empty()
     {
-        // ALL AUTHN METHODS and OPENID CREDENTIALS and EMAIL RECOVERY and METHOD REGISTRATION DELETED
+        // ALL AUTHN METHODS, OPENID, EMAIL RECOVERY, VERIFIED EMAILS and METHOD REGISTRATION DELETED
         log_info!(env, "All identity authn methods deleted!");
 
         update_holder(
@@ -195,6 +224,7 @@ pub(crate) async fn process(
                             .collect()
                     }),
                     email_recovery_addresses,
+                    verified_email_addresses,
                 },
             },
         )?;
@@ -266,6 +296,12 @@ pub(crate) fn is_email_recovery_present(
     response_data: &[u8],
 ) -> Result<bool, HolderProcessingError> {
     is_non_empty_optional_vec_field_present(response_data, "email_recovery")
+}
+
+pub(crate) fn is_verified_emails_present(
+    response_data: &[u8],
+) -> Result<bool, HolderProcessingError> {
+    is_non_empty_optional_vec_field_present(response_data, "verified_emails")
 }
 
 fn is_non_empty_optional_vec_field_present(
