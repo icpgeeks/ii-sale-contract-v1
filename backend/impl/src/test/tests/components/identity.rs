@@ -12,7 +12,8 @@ use common_canister_impl::{
             EmailRecoveryCredentialRemoveRet, GetAccountDelegationRet, GetAccountsError,
             GetDefaultAccountRet, GetDelegationResponse, IdentityAuthnInfo, IdentityAuthnInfoRet,
             IdentityInfoRet, McpConfig, McpSetConfigRet, OpenidCredentialRemoveRet,
-            PrepareAccountDelegationRet, PublicKey, RegistrationId, UserNumber, WebAuthn,
+            PrepareAccountDelegationRet, PublicKey, RegistrationId, UserNumber,
+            VerifiedEmailRemoveRet, WebAuthn,
         },
         interface::Identity,
         interface_impl::IdentityImpl,
@@ -190,6 +191,23 @@ impl Identity for IdentityTest {
     ) -> Result<EmailRecoveryCredentialRemoveRet, String> {
         self.proxy
             .decode_email_recovery_credential_remove_response(response_data)
+    }
+
+    fn build_verified_email_remove_request(
+        &self,
+        identity_number: &IdentityNumber,
+        address: &String,
+    ) -> IcAgentRequestDefinition {
+        self.proxy
+            .build_verified_email_remove_request(identity_number, address)
+    }
+
+    fn decode_verified_email_remove_response(
+        &self,
+        response_data: &[u8],
+    ) -> Result<VerifiedEmailRemoveRet, String> {
+        self.proxy
+            .decode_verified_email_remove_response(response_data)
     }
 
     fn build_get_principal_request(
@@ -373,7 +391,10 @@ impl Identity for IdentityTest {
         self.proxy.build_mcp_get_config_request(identity_number)
     }
 
-    fn decode_mcp_get_config_response(&self, response_data: &[u8]) -> Result<McpConfig, String> {
+    fn decode_mcp_get_config_response(
+        &self,
+        response_data: &[u8],
+    ) -> Result<Option<McpConfig>, String> {
         self.proxy.decode_mcp_get_config_response(response_data)
     }
 

@@ -1,5 +1,5 @@
 use common_canister_impl::components::identity::api::{
-    AuthnMethodRegistrationModeExitRet, AuthnMethodRemoveRet, EmailRecoveryError,
+    AuthnMethodRegistrationModeExitRet, AuthnMethodRemoveRet, EmailChallengeError,
     OpenIdCredentialRemoveError, OpenidCredentialRemoveRet, PublicKey,
 };
 use common_canister_impl::handlers::build_ic_agent_request;
@@ -29,6 +29,7 @@ pub(crate) async fn process(
         mut pubkey_supplier,
         openid_credential_supplier,
         email_recovery_supplier,
+        verified_email_supplier,
         active_registration,
     ) = get_holder_model(|_, model| match &model.state.value {
         HolderState::Capture {
@@ -38,16 +39,19 @@ pub(crate) async fn process(
                     active_registration,
                     openid_credentials,
                     email_recovery_addresses,
+                    verified_email_addresses,
                 },
             ..
         } => {
             let mut authn_pubkeys = authn_pubkeys.clone();
             let openid_credentials = openid_credentials.clone();
             let email_recovery_addresses = email_recovery_addresses.clone();
+            let verified_email_addresses = verified_email_addresses.clone();
             Ok((
                 move || authn_pubkeys.pop(),
                 move || openid_credentials.and_then(|mut creds| creds.pop()),
                 move || email_recovery_addresses.last().cloned(),
+                move || verified_email_addresses.last().cloned(),
                 *active_registration,
             ))
         }
@@ -62,10 +66,13 @@ pub(crate) async fn process(
         delete_openid_credential(env, lock, &credential).await?;
     } else if let Some(address) = email_recovery_supplier() {
         delete_email_recovery(env, lock, &address).await?;
+    } else if let Some(address) = verified_email_supplier() {
+        delete_verified_email(env, lock, &address).await?;
     } else if active_registration {
         exit_authn_method_registration(env, lock).await?;
     } else {
-        // ALL AUTHN METHODS and OPENID CREDENTIALS and EMAIL RECOVERY and METHOD REGISTRATION DELETED in this chunk, we should reevaluate state of identity by obtaining full identity info again
+        // ALL AUTHN METHODS, OPENID, EMAIL RECOVERY, VERIFIED EMAILS and METHOD REGISTRATION DELETED
+        // in this chunk — re-fetch full identity info to confirm.
         log_info!(env, "Identity authn methods: partially deleted");
 
         update_holder(
@@ -318,12 +325,72 @@ async fn delete_email_recovery(
             .map(|_| ProcessingResult::Continue)
         }
         Err(error) => match error {
-            EmailRecoveryError::InternalCanisterError(reason) => Err(to_ic_agent_error(reason)),
-            EmailRecoveryError::AddressNotRegistered | EmailRecoveryError::Unauthorized(..) => {
+            EmailChallengeError::InternalCanisterError(reason) => Err(to_ic_agent_error(reason)),
+            EmailChallengeError::AddressNotRegistered | EmailChallengeError::Unauthorized(..) => {
                 identity_authn_methods_resync(lock)
             }
             other => Err(HolderProcessingError::InternalError {
                 error: format!("Unexpected email recovery remove error: {other:?}"),
+            }),
+        },
+    }
+}
+
+async fn delete_verified_email(
+    env: &Environment,
+    lock: &HolderLock,
+    address: &String,
+) -> Result<ProcessingResult, HolderProcessingError> {
+    log_info!(env, "Delete identity verified email: {address:?} ...");
+
+    let (request_definition, sender) = get_holder_model(|_, model| {
+        (
+            env.get_identity()
+                .build_verified_email_remove_request(&model.identity_number.unwrap(), address),
+            model.get_request_sender(),
+        )
+    });
+
+    let ic_agent_request = build_ic_agent_request(env, request_definition, sender)
+        .await
+        .map_err(to_internal_error)?;
+
+    let response_data = match execute_ic_agent_request(env, ic_agent_request).await {
+        Ok(data) => data,
+        Err(err) => {
+            log_error!(
+                env,
+                "Delete identity verified email: ic agent error {err:?}"
+            );
+            return identity_authn_methods_resync(lock);
+        }
+    };
+
+    let response = env
+        .get_identity()
+        .decode_verified_email_remove_response(&response_data)
+        .map_err(to_internal_error)?;
+
+    match response {
+        Ok(()) => {
+            log_info!(env, "Delete identity verified email: {address:?} deleted.");
+            update_holder(
+                lock,
+                HolderProcessingEvent::Capturing {
+                    event: CaptureProcessingEvent::IdentityVerifiedEmailDeleted {
+                        address: address.clone(),
+                    },
+                },
+            )
+            .map(|_| ProcessingResult::Continue)
+        }
+        Err(error) => match error {
+            EmailChallengeError::InternalCanisterError(reason) => Err(to_ic_agent_error(reason)),
+            EmailChallengeError::AddressNotRegistered | EmailChallengeError::Unauthorized(..) => {
+                identity_authn_methods_resync(lock)
+            }
+            other => Err(HolderProcessingError::InternalError {
+                error: format!("Unexpected verified email remove error: {other:?}"),
             }),
         },
     }

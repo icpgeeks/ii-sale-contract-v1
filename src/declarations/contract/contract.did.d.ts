@@ -152,6 +152,7 @@ export type CaptureProcessingEvent = { 'HolderAuthnMethodRegistered' : null } |
   { 'IdentityAuthnMethodRegistrationExited' : null } |
   { 'CaptureFinished' : null } |
   { 'ProtectedIdentityAuthnMethodDeleted' : null } |
+  { 'IdentityVerifiedEmailDeleted' : { 'address' : string } } |
   { 'IdentityAuthnMethodsPartiallyDeleted' : null } |
   { 'AuthnMethodSessionRegisterError' : { 'error' : CaptureError } } |
   { 'IdentityMcpConfigObtained' : null } |
@@ -168,6 +169,7 @@ export type CaptureProcessingEvent = { 'HolderAuthnMethodRegistered' : null } |
   { 'IdentityMcpCleanupCompleted' : null } |
   {
     'IdentityAuthnMethodsObtained' : {
+      'verified_email_addresses' : Array<string>,
       'authn_pubkeys' : Array<Uint8Array | number[]>,
       'email_recovery_addresses' : Array<string>,
       'active_registration' : boolean,
@@ -212,6 +214,7 @@ export type CaptureState = { 'CaptureFailed' : { 'error' : CaptureError } } |
   } |
   {
     'DeletingIdentityAuthnMethods' : {
+      'verified_email_addresses' : Array<string>,
       'authn_pubkeys' : Array<Uint8Array | number[]>,
       'email_recovery_addresses' : Array<string>,
       'active_registration' : boolean,

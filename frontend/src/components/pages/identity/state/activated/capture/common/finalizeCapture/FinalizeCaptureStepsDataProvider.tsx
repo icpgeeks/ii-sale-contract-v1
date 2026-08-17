@@ -100,7 +100,12 @@ const getStepFromCaptureState = (subState: CaptureState): CaptureStep => {
                 const numberOfAuthnPubkeys = union.state.authn_pubkeys.length;
                 const numberOfOpenIdCredentials = fromNullishNullable(union.state.openid_credentials)?.length ?? 0;
                 const numberOfEmailRecoveryAddresses = union.state.email_recovery_addresses.length;
-                result.passkeysLeft = numberOfAuthnPubkeys + numberOfOpenIdCredentials + numberOfEmailRecoveryAddresses;
+                const numberOfVerifiedEmailAddresses = union.state.verified_email_addresses.length;
+                result.passkeysLeft =
+                    numberOfAuthnPubkeys +
+                    numberOfOpenIdCredentials +
+                    numberOfEmailRecoveryAddresses +
+                    numberOfVerifiedEmailAddresses;
             }
             return result;
         }

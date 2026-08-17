@@ -4,7 +4,7 @@ use common_canister_impl::{
         Aud, AuthnMethod, AuthnMethodData, AuthnMethodProtection, AuthnMethodPurpose,
         AuthnMethodRegistrationInfo, AuthnMethodSecuritySettings, EmailRecoveryCredential,
         IdentityInfo, IdentityInfoError, IdentityInfoRet, MetadataMapV2, OpenIdCredential,
-        WebAuthn,
+        VerifiedEmail, WebAuthn,
     },
     handlers::ic_request::public_key::uncompressed_public_key_to_asn1_block,
 };
@@ -34,8 +34,10 @@ use crate::{
         support::mocks::{
             mock_accounts_for_principal_check_empty, mock_authn_method_registration_mode_exit_ok,
             mock_email_recovery_remove_ok, mock_identity_info_ok,
-            mock_identity_info_ok_with_email_recovery, mock_mcp_get_config_enabled,
+            mock_identity_info_ok_with_email_recovery, mock_identity_info_ok_with_verified_emails,
+            mock_mcp_get_config_absent, mock_mcp_get_config_disabled, mock_mcp_get_config_enabled,
             mock_mcp_set_config_ok, mock_prepare_account_delegation_for_check,
+            mock_verified_email_remove_ok,
         },
         HT_CAPTURED_IDENTITY_NUMBER, HT_SALE_DEAL_SAFE_CLOSE_DURATION, HT_STANDARD_CERT_EXPIRATION,
         TEST_CAPTURE_HOSTNAME,
@@ -163,6 +165,7 @@ async fn test_check_openid_credentials_present() {
             last_usage_timestamp: Some(121),
         }]),
         email_recovery: None,
+        verified_emails: None,
         name: Some("John Doe".to_string()),
         created_at: Some(1212),
     });
@@ -198,6 +201,7 @@ async fn test_identity_api_changed() {
         pub authn_method_registration: Option<AuthnMethodRegistrationInfo>,
         pub openid_credentials: Option<Vec<OpenIdCredentialNew>>,
         pub email_recovery: Option<Vec<EmailRecoveryCredential>>,
+        pub verified_emails: Option<Vec<VerifiedEmail>>,
         pub name: Option<String>,
         pub created_at: Option<Timestamp>,
     }
@@ -270,6 +274,7 @@ async fn test_identity_api_changed() {
                 last_usage_timestamp: None,
             }]),
             email_recovery: None,
+            verified_emails: None,
             name: None,
             created_at: None,
         }))
@@ -353,6 +358,126 @@ async fn test_capture_deletes_email_recovery() {
 }
 
 #[tokio::test]
+async fn test_capture_deletes_verified_emails() {
+    ht_holder_authn_method_registration(
+        HT_STANDARD_CERT_EXPIRATION,
+        ht_get_test_deployer(),
+        HT_CAPTURED_IDENTITY_NUMBER,
+    )
+    .await;
+
+    ht_advance_to_exit_authn_method_registration().await;
+
+    mock_authn_method_registration_mode_exit_ok();
+    super::tick().await;
+
+    mock_accounts_for_principal_check_empty();
+    super::tick().await;
+
+    mock_prepare_account_delegation_for_check(ht_get_test_hub_canister().as_slice().to_vec());
+    super::tick().await;
+    super::tick().await;
+
+    test_state_matches!(HolderState::Capture {
+        sub_state: CaptureState::ObtainingIdentityAuthnMethods,
+    });
+
+    mock_identity_info_ok_with_verified_emails(
+        vec![AuthnMethodData {
+            security_settings: AuthnMethodSecuritySettings {
+                protection: AuthnMethodProtection::Unprotected,
+                purpose: AuthnMethodPurpose::Authentication,
+            },
+            metadata: Box::new(MetadataMapV2(vec![])),
+            last_authentication: None,
+            authn_method: AuthnMethod::WebAuthn(WebAuthn {
+                pubkey: uncompressed_public_key_to_asn1_block(
+                    secp256k1::PublicKey::from_slice(&PUBLIC_KEY)
+                        .unwrap()
+                        .serialize_uncompressed(),
+                )
+                .into(),
+                credential_id: vec![1, 2, 4].into(),
+            }),
+        }],
+        vec![VerifiedEmail {
+            address: "alice@example.com".to_string(),
+            verified_at: 1,
+        }],
+    );
+    super::tick().await;
+
+    test_state_matches!(HolderState::Capture {
+        sub_state: CaptureState::DeletingIdentityAuthnMethods {
+            verified_email_addresses,
+            ..
+        },
+    } if verified_email_addresses == &vec!["alice@example.com".to_string()]);
+
+    mock_verified_email_remove_ok();
+    super::tick().await;
+
+    test_state_matches!(HolderState::Capture {
+        sub_state: CaptureState::DeletingIdentityAuthnMethods {
+            verified_email_addresses,
+            ..
+        },
+    } if verified_email_addresses.is_empty());
+}
+
+#[tokio::test]
+async fn test_check_verified_emails_present() {
+    // Previous IdentityInfo shape without `verified_emails` — used to simulate
+    // typed decode dropping the field while raw candid still carries it.
+    #[derive(CandidType, Deserialize, Debug)]
+    pub struct IdentityInfoPrevious {
+        pub authn_methods: Vec<AuthnMethodData>,
+        pub metadata: Box<MetadataMapV2>,
+        pub authn_method_registration: Option<AuthnMethodRegistrationInfo>,
+        pub openid_credentials: Option<Vec<OpenIdCredential>>,
+        pub email_recovery: Option<Vec<EmailRecoveryCredential>>,
+        pub name: Option<String>,
+        pub created_at: Option<Timestamp>,
+    }
+
+    #[derive(CandidType, Deserialize)]
+    pub enum IdentityInfoRetPrevious {
+        Ok(IdentityInfoPrevious),
+        Err(IdentityInfoError),
+    }
+
+    let ret_current = IdentityInfoRet::Ok(IdentityInfo {
+        authn_methods: vec![],
+        metadata: Box::new(MetadataMapV2(vec![])),
+        authn_method_registration: None,
+        openid_credentials: None,
+        email_recovery: None,
+        verified_emails: Some(vec![VerifiedEmail {
+            address: "alice@example.com".to_string(),
+            verified_at: 42,
+        }]),
+        name: None,
+        created_at: None,
+    });
+
+    let slice = Encode!(&ret_current).unwrap();
+    assert!(
+        crate::handlers::holder::states::obtain_identity_authn_methods::is_verified_emails_present(
+            &slice
+        )
+        .unwrap()
+    );
+
+    let decoded_ret = Decode!(&slice, IdentityInfoRetPrevious).unwrap();
+    match decoded_ret {
+        IdentityInfoRetPrevious::Ok(_) => {
+            // Previous type has no verified_emails field — raw detector still sees it.
+        }
+        IdentityInfoRetPrevious::Err(_) => panic!("expected Ok"),
+    }
+}
+
+#[tokio::test]
 async fn test_capture_disables_mcp_access() {
     ht_holder_authn_method_registration(
         HT_STANDARD_CERT_EXPIRATION,
@@ -404,6 +529,112 @@ async fn test_capture_disables_mcp_access() {
     });
 
     mock_mcp_set_config_ok();
+    super::tick().await;
+
+    test_state_matches!(HolderState::Capture {
+        sub_state: CaptureState::FinishCapture,
+    });
+}
+
+/// `Some { enabled: false }` must skip disable step the same way as absent config.
+#[tokio::test]
+async fn test_capture_skips_mcp_cleanup_when_disabled() {
+    ht_holder_authn_method_registration(
+        HT_STANDARD_CERT_EXPIRATION,
+        ht_get_test_deployer(),
+        HT_CAPTURED_IDENTITY_NUMBER,
+    )
+    .await;
+
+    ht_advance_to_exit_authn_method_registration().await;
+
+    mock_authn_method_registration_mode_exit_ok();
+    super::tick().await;
+
+    mock_accounts_for_principal_check_empty();
+    super::tick().await;
+
+    mock_prepare_account_delegation_for_check(ht_get_test_hub_canister().as_slice().to_vec());
+    super::tick().await;
+    super::tick().await;
+
+    mock_identity_info_ok(vec![AuthnMethodData {
+        security_settings: AuthnMethodSecuritySettings {
+            protection: AuthnMethodProtection::Unprotected,
+            purpose: AuthnMethodPurpose::Authentication,
+        },
+        metadata: Box::new(MetadataMapV2(vec![])),
+        last_authentication: None,
+        authn_method: AuthnMethod::WebAuthn(WebAuthn {
+            pubkey: uncompressed_public_key_to_asn1_block(
+                secp256k1::PublicKey::from_slice(&PUBLIC_KEY)
+                    .unwrap()
+                    .serialize_uncompressed(),
+            )
+            .into(),
+            credential_id: vec![1, 2, 4].into(),
+        }),
+    }]);
+    super::tick().await;
+
+    test_state_matches!(HolderState::Capture {
+        sub_state: CaptureState::ObtainingIdentityMcpConfig,
+    });
+
+    mock_mcp_get_config_disabled();
+    super::tick().await;
+
+    test_state_matches!(HolderState::Capture {
+        sub_state: CaptureState::FinishCapture,
+    });
+}
+
+/// `None` (never configured) must skip disable step.
+#[tokio::test]
+async fn test_capture_skips_mcp_cleanup_when_absent() {
+    ht_holder_authn_method_registration(
+        HT_STANDARD_CERT_EXPIRATION,
+        ht_get_test_deployer(),
+        HT_CAPTURED_IDENTITY_NUMBER,
+    )
+    .await;
+
+    ht_advance_to_exit_authn_method_registration().await;
+
+    mock_authn_method_registration_mode_exit_ok();
+    super::tick().await;
+
+    mock_accounts_for_principal_check_empty();
+    super::tick().await;
+
+    mock_prepare_account_delegation_for_check(ht_get_test_hub_canister().as_slice().to_vec());
+    super::tick().await;
+    super::tick().await;
+
+    mock_identity_info_ok(vec![AuthnMethodData {
+        security_settings: AuthnMethodSecuritySettings {
+            protection: AuthnMethodProtection::Unprotected,
+            purpose: AuthnMethodPurpose::Authentication,
+        },
+        metadata: Box::new(MetadataMapV2(vec![])),
+        last_authentication: None,
+        authn_method: AuthnMethod::WebAuthn(WebAuthn {
+            pubkey: uncompressed_public_key_to_asn1_block(
+                secp256k1::PublicKey::from_slice(&PUBLIC_KEY)
+                    .unwrap()
+                    .serialize_uncompressed(),
+            )
+            .into(),
+            credential_id: vec![1, 2, 4].into(),
+        }),
+    }]);
+    super::tick().await;
+
+    test_state_matches!(HolderState::Capture {
+        sub_state: CaptureState::ObtainingIdentityMcpConfig,
+    });
+
+    mock_mcp_get_config_absent();
     super::tick().await;
 
     test_state_matches!(HolderState::Capture {

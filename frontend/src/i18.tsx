@@ -66,7 +66,7 @@ const rawI18 = {
     toolbar: {
         title: {
             first: 'INTERNET IDENTITY',
-            second: 'SALE CONTRACT v1.5'
+            second: 'SALE CONTRACT v1.6'
         },
         menu: {
             home: 'Home',

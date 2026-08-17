@@ -231,6 +231,7 @@ export const idlFactory = ({ IDL }) => {
     'FinishCapture' : IDL.Null,
     'ExitAndRegisterHolderAuthnMethod' : ConfirmHolderAuthnMethodRegistrationArgs,
     'DeletingIdentityAuthnMethods' : IDL.Record({
+      'verified_email_addresses' : IDL.Vec(IDL.Text),
       'authn_pubkeys' : IDL.Vec(IDL.Vec(IDL.Nat8)),
       'email_recovery_addresses' : IDL.Vec(IDL.Text),
       'active_registration' : IDL.Bool,
@@ -662,6 +663,7 @@ export const idlFactory = ({ IDL }) => {
     'IdentityAuthnMethodRegistrationExited' : IDL.Null,
     'CaptureFinished' : IDL.Null,
     'ProtectedIdentityAuthnMethodDeleted' : IDL.Null,
+    'IdentityVerifiedEmailDeleted' : IDL.Record({ 'address' : IDL.Text }),
     'IdentityAuthnMethodsPartiallyDeleted' : IDL.Null,
     'AuthnMethodSessionRegisterError' : IDL.Record({ 'error' : CaptureError }),
     'IdentityMcpConfigObtained' : IDL.Null,
@@ -675,6 +677,7 @@ export const idlFactory = ({ IDL }) => {
     'CancelCapture' : IDL.Null,
     'IdentityMcpCleanupCompleted' : IDL.Null,
     'IdentityAuthnMethodsObtained' : IDL.Record({
+      'verified_email_addresses' : IDL.Vec(IDL.Text),
       'authn_pubkeys' : IDL.Vec(IDL.Vec(IDL.Nat8)),
       'email_recovery_addresses' : IDL.Vec(IDL.Text),
       'active_registration' : IDL.Bool,

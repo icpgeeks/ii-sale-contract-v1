@@ -7,7 +7,8 @@ use common_canister_impl::components::{
         AuthnMethodRegistrationModeExitError, AuthnMethodRegistrationModeExitRet,
         AuthnMethodRemoveRet, EmailRecoveryCredential, EmailRecoveryCredentialRemoveRet,
         GetAccountsError, IdentityInfo, IdentityInfoRet, McpConfig, McpSetConfigRet, MetadataMapV2,
-        PrepareAccountDelegation, PrepareAccountDelegationRet,
+        PrepareAccountDelegation, PrepareAccountDelegationRet, VerifiedEmail,
+        VerifiedEmailRemoveRet,
     },
     nns::api::ListNeuronsResponse,
     nns_dap::api::{AccountDetails, GetAccountResponse},
@@ -186,6 +187,12 @@ pub(crate) fn mock_email_recovery_remove_ok() {
     set_test_ic_agent_response(Encode!(&result).unwrap());
 }
 
+/// Mocks IC agent response: verified email removal succeeded.
+pub(crate) fn mock_verified_email_remove_ok() {
+    let result: VerifiedEmailRemoveRet = Ok(());
+    set_test_ic_agent_response(Encode!(&result).unwrap());
+}
+
 /// Mocks IC agent response: authn method registration failed with the given error.
 pub(crate) fn mock_authn_method_register_err(error: AuthnMethodRegisterError) {
     set_test_ic_agent_response(Encode!(&AuthnMethodRegisterRet::Err(error)).unwrap());
@@ -232,26 +239,28 @@ pub(crate) fn mock_authn_method_registration_mode_exit_ret_err(
 // MCP
 // ---------------------------------------------------------------------------
 
-/// Mocks IC agent response: MCP is disabled (default config).
+/// Mocks IC agent response: MCP never configured (`opt null` from II).
+pub(crate) fn mock_mcp_get_config_absent() {
+    let result: Option<McpConfig> = None;
+    set_test_ic_agent_response(Encode!(&result).unwrap());
+}
+
+/// Mocks IC agent response: MCP configured but disabled (`Some { enabled: false }`).
 pub(crate) fn mock_mcp_get_config_disabled() {
-    set_test_ic_agent_response(
-        Encode!(&McpConfig {
-            enabled: false,
-            url: None,
-        })
-        .unwrap(),
-    );
+    let result: Option<McpConfig> = Some(McpConfig {
+        enabled: false,
+        url: None,
+    });
+    set_test_ic_agent_response(Encode!(&result).unwrap());
 }
 
 /// Mocks IC agent response: MCP is enabled with the given trusted server URL.
 pub(crate) fn mock_mcp_get_config_enabled(url: &str) {
-    set_test_ic_agent_response(
-        Encode!(&McpConfig {
-            enabled: true,
-            url: Some(url.to_string()),
-        })
-        .unwrap(),
-    );
+    let result: Option<McpConfig> = Some(McpConfig {
+        enabled: true,
+        url: Some(url.to_string()),
+    });
+    set_test_ic_agent_response(Encode!(&result).unwrap());
 }
 
 /// Mocks IC agent response: MCP config disabled and session grant revoked.
@@ -266,7 +275,7 @@ pub(crate) fn mock_mcp_set_config_ok() {
 /// Mocks IC agent response: identity info retrieved with the given authn methods.
 ///
 /// Other fields (`metadata`, `authn_method_registration`, `openid_credentials`, `name`,
-/// `created_at`) are set to sensible empty defaults.
+/// `created_at`, email/verified email lists) are set to sensible empty defaults.
 pub(crate) fn mock_identity_info_ok(authn_methods: Vec<AuthnMethodData>) {
     set_test_ic_agent_response(
         Encode!(&IdentityInfoRet::Ok(IdentityInfo {
@@ -275,6 +284,7 @@ pub(crate) fn mock_identity_info_ok(authn_methods: Vec<AuthnMethodData>) {
             authn_method_registration: None,
             openid_credentials: None,
             email_recovery: None,
+            verified_emails: None,
             name: None,
             created_at: None,
         }))
@@ -293,6 +303,26 @@ pub(crate) fn mock_identity_info_ok_with_email_recovery(
             authn_method_registration: None,
             openid_credentials: None,
             email_recovery: Some(email_recovery),
+            verified_emails: None,
+            name: None,
+            created_at: None,
+        }))
+        .unwrap(),
+    );
+}
+
+pub(crate) fn mock_identity_info_ok_with_verified_emails(
+    authn_methods: Vec<AuthnMethodData>,
+    verified_emails: Vec<VerifiedEmail>,
+) {
+    set_test_ic_agent_response(
+        Encode!(&IdentityInfoRet::Ok(IdentityInfo {
+            authn_methods,
+            metadata: Box::new(MetadataMapV2(vec![])),
+            authn_method_registration: None,
+            openid_credentials: None,
+            email_recovery: None,
+            verified_emails: Some(verified_emails),
             name: None,
             created_at: None,
         }))

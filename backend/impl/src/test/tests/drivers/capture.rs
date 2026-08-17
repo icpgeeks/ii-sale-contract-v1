@@ -17,7 +17,7 @@ use crate::{
         support::mocks::{
             mock_accounts_for_principal_check_empty, mock_authn_method_register_ok,
             mock_authn_method_registration_mode_exit_ok, mock_identity_info_ok,
-            mock_mcp_get_config_disabled, mock_obtain_hub_canister_ok,
+            mock_mcp_get_config_absent, mock_obtain_hub_canister_ok,
             mock_prepare_account_delegation_for_check,
         },
         TEST_AUTHN_CONFIRMATION_CODE, TEST_AUTHN_REGISTER_EXPIRATION_NANOS, TEST_CAPTURE_HOSTNAME,
@@ -115,8 +115,8 @@ pub(crate) async fn drive_to_captured(
     }]);
     super::super::tick().await;
 
-    // --- Obtain MCP config (IC agent call: disabled → skip bindings) ---
-    mock_mcp_get_config_disabled();
+    // --- Obtain MCP config (IC agent call: absent → skip cleanup) ---
+    mock_mcp_get_config_absent();
     super::super::tick().await;
 
     // --- Finish capture → enter Holding/FetchAssets/StartFetchAssets ---

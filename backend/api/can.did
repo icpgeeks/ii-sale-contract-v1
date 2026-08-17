@@ -158,6 +158,7 @@ type CaptureProcessingEvent = variant {
   IdentityAuthnMethodRegistrationExited;
   CaptureFinished;
   ProtectedIdentityAuthnMethodDeleted;
+  IdentityVerifiedEmailDeleted : record { address : text };
   IdentityAuthnMethodsPartiallyDeleted;
   AuthnMethodSessionRegisterError : record { error : CaptureError };
   IdentityMcpConfigObtained;
@@ -171,6 +172,7 @@ type CaptureProcessingEvent = variant {
   CancelCapture;
   IdentityMcpCleanupCompleted;
   IdentityAuthnMethodsObtained : record {
+    verified_email_addresses : vec text;
     authn_pubkeys : vec blob;
     email_recovery_addresses : vec text;
     active_registration : bool;
@@ -205,6 +207,7 @@ type CaptureState = variant {
   FinishCapture;
   ExitAndRegisterHolderAuthnMethod : ConfirmHolderAuthnMethodRegistrationArgs;
   DeletingIdentityAuthnMethods : record {
+    verified_email_addresses : vec text;
     authn_pubkeys : vec blob;
     email_recovery_addresses : vec text;
     active_registration : bool;
