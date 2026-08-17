@@ -6,8 +6,8 @@ This single-use smart contract enables trustless sale of an entire Internet Iden
 
 ### Version 1.6
 
-- Added cleanup of verified emails.
-- Support MCP configuration api change.
+- Added verified email cleanup during Internet Identity transfer.
+- Updated MCP config handling for the latest Internet Identity API.
 
 ### Version 1.5
 
