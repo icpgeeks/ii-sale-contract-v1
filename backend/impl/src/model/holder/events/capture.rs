@@ -428,7 +428,9 @@ pub(crate) fn handle_capture_event(
                 }
             );
             model.identity_name = identity_name.clone();
-            update_capture_state(model, time, CaptureState::ObtainingIdentityMcpConfig);
+            // Revocation is a security cleanup, so it is performed unconditionally instead of
+            // trusting a preceding query or skipping the update for an apparently disabled config.
+            update_capture_state(model, time, CaptureState::DisablingIdentityMcpConfig);
             Ok(())
         }
         CaptureProcessingEvent::IdentityMcpCleanupResync => {
@@ -439,7 +441,7 @@ pub(crate) fn handle_capture_event(
                     ..
                 }
             );
-            update_capture_state(model, time, CaptureState::ObtainingIdentityMcpConfig);
+            update_capture_state(model, time, CaptureState::DisablingIdentityMcpConfig);
             Ok(())
         }
         CaptureProcessingEvent::IdentityMcpCleanupSkipped
