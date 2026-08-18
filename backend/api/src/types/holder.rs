@@ -60,6 +60,9 @@ pub enum CaptureState {
         email_recovery_addresses: Vec<String>,
         verified_email_addresses: Vec<String>,
     },
+    /// Legacy state kept so holders persisted by the current schema can finish capture.
+    /// New capture flows disable MCP unconditionally without reading the config first.
+    /// TODO(next version): remove after persisted holders have been migrated.
     ObtainingIdentityMcpConfig,
     DisablingIdentityMcpConfig,
     FinishCapture,
@@ -383,8 +386,15 @@ pub enum CaptureProcessingEvent {
     IdentityAuthnMethodsDeleted {
         identity_name: Option<String>,
     },
+    /// Legacy event kept for replaying capture histories written by the current schema.
+    /// TODO(next version): remove together with `ObtainingIdentityMcpConfig`.
     IdentityMcpConfigObtained,
+    /// Legacy event kept for replaying capture histories written by the current schema.
+    /// New capture flows never skip MCP cleanup.
+    /// TODO(next version): remove after the event schema is migrated.
     IdentityMcpCleanupSkipped,
+    /// Retry event retained for the current event schema.
+    /// TODO(next version): replace with an MCP cleanup retry event that does not imply resync.
     IdentityMcpCleanupResync,
     IdentityMcpCleanupCompleted,
     CaptureFinished,

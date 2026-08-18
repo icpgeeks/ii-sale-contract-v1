@@ -35,7 +35,6 @@ use crate::{
             mock_accounts_for_principal_check_empty, mock_authn_method_registration_mode_exit_ok,
             mock_email_recovery_remove_ok, mock_identity_info_ok,
             mock_identity_info_ok_with_email_recovery, mock_identity_info_ok_with_verified_emails,
-            mock_mcp_get_config_absent, mock_mcp_get_config_disabled, mock_mcp_get_config_enabled,
             mock_mcp_set_config_ok, mock_prepare_account_delegation_for_check,
             mock_verified_email_remove_ok,
         },
@@ -478,7 +477,7 @@ async fn test_check_verified_emails_present() {
 }
 
 #[tokio::test]
-async fn test_capture_disables_mcp_access() {
+async fn test_capture_disables_mcp_access_unconditionally() {
     ht_holder_authn_method_registration(
         HT_STANDARD_CERT_EXPIRATION,
         ht_get_test_deployer(),
@@ -515,13 +514,6 @@ async fn test_capture_disables_mcp_access() {
             credential_id: vec![1, 2, 4].into(),
         }),
     }]);
-    super::tick().await;
-
-    test_state_matches!(HolderState::Capture {
-        sub_state: CaptureState::ObtainingIdentityMcpConfig,
-    });
-
-    mock_mcp_get_config_enabled("https://mcp.id.ai/mcp");
     super::tick().await;
 
     test_state_matches!(HolderState::Capture {
@@ -529,112 +521,6 @@ async fn test_capture_disables_mcp_access() {
     });
 
     mock_mcp_set_config_ok();
-    super::tick().await;
-
-    test_state_matches!(HolderState::Capture {
-        sub_state: CaptureState::FinishCapture,
-    });
-}
-
-/// `Some { enabled: false }` must skip disable step the same way as absent config.
-#[tokio::test]
-async fn test_capture_skips_mcp_cleanup_when_disabled() {
-    ht_holder_authn_method_registration(
-        HT_STANDARD_CERT_EXPIRATION,
-        ht_get_test_deployer(),
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-
-    ht_advance_to_exit_authn_method_registration().await;
-
-    mock_authn_method_registration_mode_exit_ok();
-    super::tick().await;
-
-    mock_accounts_for_principal_check_empty();
-    super::tick().await;
-
-    mock_prepare_account_delegation_for_check(ht_get_test_hub_canister().as_slice().to_vec());
-    super::tick().await;
-    super::tick().await;
-
-    mock_identity_info_ok(vec![AuthnMethodData {
-        security_settings: AuthnMethodSecuritySettings {
-            protection: AuthnMethodProtection::Unprotected,
-            purpose: AuthnMethodPurpose::Authentication,
-        },
-        metadata: Box::new(MetadataMapV2(vec![])),
-        last_authentication: None,
-        authn_method: AuthnMethod::WebAuthn(WebAuthn {
-            pubkey: uncompressed_public_key_to_asn1_block(
-                secp256k1::PublicKey::from_slice(&PUBLIC_KEY)
-                    .unwrap()
-                    .serialize_uncompressed(),
-            )
-            .into(),
-            credential_id: vec![1, 2, 4].into(),
-        }),
-    }]);
-    super::tick().await;
-
-    test_state_matches!(HolderState::Capture {
-        sub_state: CaptureState::ObtainingIdentityMcpConfig,
-    });
-
-    mock_mcp_get_config_disabled();
-    super::tick().await;
-
-    test_state_matches!(HolderState::Capture {
-        sub_state: CaptureState::FinishCapture,
-    });
-}
-
-/// `None` (never configured) must skip disable step.
-#[tokio::test]
-async fn test_capture_skips_mcp_cleanup_when_absent() {
-    ht_holder_authn_method_registration(
-        HT_STANDARD_CERT_EXPIRATION,
-        ht_get_test_deployer(),
-        HT_CAPTURED_IDENTITY_NUMBER,
-    )
-    .await;
-
-    ht_advance_to_exit_authn_method_registration().await;
-
-    mock_authn_method_registration_mode_exit_ok();
-    super::tick().await;
-
-    mock_accounts_for_principal_check_empty();
-    super::tick().await;
-
-    mock_prepare_account_delegation_for_check(ht_get_test_hub_canister().as_slice().to_vec());
-    super::tick().await;
-    super::tick().await;
-
-    mock_identity_info_ok(vec![AuthnMethodData {
-        security_settings: AuthnMethodSecuritySettings {
-            protection: AuthnMethodProtection::Unprotected,
-            purpose: AuthnMethodPurpose::Authentication,
-        },
-        metadata: Box::new(MetadataMapV2(vec![])),
-        last_authentication: None,
-        authn_method: AuthnMethod::WebAuthn(WebAuthn {
-            pubkey: uncompressed_public_key_to_asn1_block(
-                secp256k1::PublicKey::from_slice(&PUBLIC_KEY)
-                    .unwrap()
-                    .serialize_uncompressed(),
-            )
-            .into(),
-            credential_id: vec![1, 2, 4].into(),
-        }),
-    }]);
-    super::tick().await;
-
-    test_state_matches!(HolderState::Capture {
-        sub_state: CaptureState::ObtainingIdentityMcpConfig,
-    });
-
-    mock_mcp_get_config_absent();
     super::tick().await;
 
     test_state_matches!(HolderState::Capture {

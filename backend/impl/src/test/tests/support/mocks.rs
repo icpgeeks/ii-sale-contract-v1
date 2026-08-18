@@ -6,7 +6,7 @@ use common_canister_impl::components::{
         AuthnMethodRegisterRet, AuthnMethodRegistrationModeEnterRet,
         AuthnMethodRegistrationModeExitError, AuthnMethodRegistrationModeExitRet,
         AuthnMethodRemoveRet, EmailRecoveryCredential, EmailRecoveryCredentialRemoveRet,
-        GetAccountsError, IdentityInfo, IdentityInfoRet, McpConfig, McpSetConfigRet, MetadataMapV2,
+        GetAccountsError, IdentityInfo, IdentityInfoRet, McpSetConfigRet, MetadataMapV2,
         PrepareAccountDelegation, PrepareAccountDelegationRet, VerifiedEmail,
         VerifiedEmailRemoveRet,
     },
@@ -238,30 +238,6 @@ pub(crate) fn mock_authn_method_registration_mode_exit_ret_err(
 // ---------------------------------------------------------------------------
 // MCP
 // ---------------------------------------------------------------------------
-
-/// Mocks IC agent response: MCP never configured (`opt null` from II).
-pub(crate) fn mock_mcp_get_config_absent() {
-    let result: Option<McpConfig> = None;
-    set_test_ic_agent_response(Encode!(&result).unwrap());
-}
-
-/// Mocks IC agent response: MCP configured but disabled (`Some { enabled: false }`).
-pub(crate) fn mock_mcp_get_config_disabled() {
-    let result: Option<McpConfig> = Some(McpConfig {
-        enabled: false,
-        url: None,
-    });
-    set_test_ic_agent_response(Encode!(&result).unwrap());
-}
-
-/// Mocks IC agent response: MCP is enabled with the given trusted server URL.
-pub(crate) fn mock_mcp_get_config_enabled(url: &str) {
-    let result: Option<McpConfig> = Some(McpConfig {
-        enabled: true,
-        url: Some(url.to_string()),
-    });
-    set_test_ic_agent_response(Encode!(&result).unwrap());
-}
 
 /// Mocks IC agent response: MCP config disabled and session grant revoked.
 pub(crate) fn mock_mcp_set_config_ok() {
